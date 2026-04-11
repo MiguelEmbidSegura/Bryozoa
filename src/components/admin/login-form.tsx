@@ -8,11 +8,12 @@ import { Label } from "@/components/ui/label";
 
 const initialState: { error?: string } = {};
 
-export function LoginForm() {
+export function LoginForm({ redirectTo = "/admin" }: { redirectTo?: string }) {
   const [state, formAction, pending] = useActionState(loginAction, initialState);
 
   return (
     <form action={formAction} className="space-y-5">
+      <input type="hidden" name="redirectTo" value={redirectTo} />
       <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
         <Input id="email" name="email" type="email" placeholder="admin@bryozoo.local" required />

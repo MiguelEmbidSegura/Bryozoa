@@ -71,6 +71,23 @@ async function flushIssues(batchId: string, issues: ImportIssueDraft[]) {
   issues.length = 0;
 }
 
+async function persistImportLog(batchId: string, summary: ImportSummary) {
+  try {
+    await mkdir(IMPORT_LOG_DIR, { recursive: true });
+    await writeFile(
+      join(IMPORT_LOG_DIR, `${new Date().toISOString().replace(/[:.]/g, "-")}-${batchId}.json`),
+      JSON.stringify(summary, null, 2),
+      "utf8",
+    );
+  } catch (error) {
+    console.warn(
+      `[import] Could not write local import log for batch ${batchId}: ${
+        error instanceof Error ? error.message : "unknown filesystem error"
+      }`,
+    );
+  }
+}
+
 async function ensureTaxonomy(
   cache: Map<string, string>,
   taxonomy: NonNullable<ReturnType<typeof prepareImportRow>["taxonomy"]>,
@@ -332,12 +349,7 @@ export async function importBryozoaWorkbook(options: ImportOptions): Promise<Imp
       metadata: summary,
     });
 
-    await mkdir(IMPORT_LOG_DIR, { recursive: true });
-    await writeFile(
-      join(IMPORT_LOG_DIR, `${new Date().toISOString().replace(/[:.]/g, "-")}-${batch.id}.json`),
-      JSON.stringify(summary, null, 2),
-      "utf8",
-    );
+    await persistImportLog(batch.id, summary);
 
     return summary;
   } catch (error) {

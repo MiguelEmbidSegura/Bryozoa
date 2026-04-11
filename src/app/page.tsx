@@ -1,21 +1,49 @@
 import Link from "next/link";
 import { ArrowRight, Globe, Map, Search, Trees } from "lucide-react";
+import { InitialCatalogSetup } from "@/components/shared/initial-catalog-setup";
 import { MappedRecordsPreview } from "@/components/home/mapped-records-preview";
 import { RecordSummaryCard } from "@/components/records/record-summary-card";
 import { DatabaseSetupState } from "@/components/shared/database-setup-state";
 import { StatCard } from "@/components/shared/stat-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isDatabaseConnectionError } from "@/lib/db-errors";
 import { getHomeData } from "@/lib/records";
 import { formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 async function loadHomePageData() {
   try {
     const home = await getHomeData();
+
+    if (home.stats.totalRecords === 0) {
+      const [session, latestBatch] = await Promise.all([
+        getSession(),
+        prisma.importBatch.findFirst({
+          orderBy: { startedAt: "desc" },
+          select: {
+            sourceFile: true,
+            status: true,
+            processedRows: true,
+            errorCount: true,
+            warningCount: true,
+            dryRun: true,
+          },
+        }),
+      ]);
+
+      return {
+        initialSetupRequired: true as const,
+        isAuthenticated: Boolean(session && session.role === "ADMIN"),
+        latestBatch,
+        databaseUnavailable: false as const,
+      };
+    }
+
     const highlights = await prisma.specimenRecord.findMany({
       where: { archivedAt: null, images: { some: {} } },
       take: 3,
@@ -94,6 +122,15 @@ export default async function HomePage() {
 
   if (result.databaseUnavailable) {
     return <DatabaseSetupState />;
+  }
+
+  if ("initialSetupRequired" in result && result.initialSetupRequired) {
+    return (
+      <InitialCatalogSetup
+        isAuthenticated={result.isAuthenticated}
+        latestBatch={result.latestBatch}
+      />
+    );
   }
 
   const { home, highlights, mapPreviewMarkers } = result;

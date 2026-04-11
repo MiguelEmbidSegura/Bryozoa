@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { loginWithCredentials, logout, requireAdmin } from "@/lib/auth";
@@ -22,10 +23,25 @@ type LoginState = {
   error?: string;
 };
 
+function getRedirectTarget(formData: FormData, fallback: string) {
+  const raw = formData.get("redirectTo");
+
+  if (typeof raw !== "string") {
+    return fallback;
+  }
+
+  if (!raw.startsWith("/") || raw.startsWith("//")) {
+    return fallback;
+  }
+
+  return raw;
+}
+
 export async function loginAction(
   _previousState: LoginState | undefined,
   formData: FormData,
 ): Promise<LoginState> {
+  const redirectTo = getRedirectTarget(formData, "/admin");
   const parsed = loginSchema.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),
@@ -41,7 +57,7 @@ export async function loginAction(
     return { error: "Invalid credentials." };
   }
 
-  redirect("/admin");
+  redirect(redirectTo);
 }
 
 export async function logoutAction() {
@@ -82,9 +98,10 @@ export async function importWorkbookAction(formData: FormData) {
   const session = await requireAdmin();
   const file = formData.get("file");
   const dryRun = formData.get("dryRun") === "on";
+  const redirectTo = getRedirectTarget(formData, "/admin/imports");
 
   if (!(file instanceof File) || file.size === 0) {
-    redirect("/admin/imports?error=missing-file");
+    redirect(`${redirectTo}?error=missing-file`);
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -94,6 +111,12 @@ export async function importWorkbookAction(formData: FormData) {
     dryRun,
     initiatedByUserId: session.userId,
   });
+
+  revalidatePath("/");
+
+  if (redirectTo === "/") {
+    redirect("/");
+  }
 
   redirect(`/admin/imports?batch=${summary.batchId}`);
 }

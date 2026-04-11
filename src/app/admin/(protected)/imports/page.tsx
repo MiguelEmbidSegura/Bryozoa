@@ -4,6 +4,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { isDatabaseConnectionError } from "@/lib/db-errors";
 import { getImportHistory } from "@/lib/admin-data";
 
+export const maxDuration = 300;
+
 async function loadAdminImportsPageData() {
   try {
     const batches = await getImportHistory();

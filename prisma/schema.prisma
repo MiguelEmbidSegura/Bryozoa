@@ -1,0 +1,294 @@
+generator client {
+  provider   = "prisma-client"
+  output     = "../src/generated/prisma"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ADMIN
+  EDITOR
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  UPSERT
+  IMPORT
+  DELETE
+  ARCHIVE
+  LOGIN
+  LOGOUT
+}
+
+enum ImportStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  DRY_RUN
+}
+
+enum ImportSeverity {
+  INFO
+  WARNING
+  ERROR
+}
+
+enum DatePrecision {
+  UNKNOWN
+  YEAR
+  MONTH
+  DAY
+  RANGE
+  TEXTUAL
+}
+
+enum ImportKeySource {
+  REGISTER
+  OID
+  GENERATED
+  MANUAL
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String
+  passwordHash String
+  role         UserRole   @default(EDITOR)
+  isActive     Boolean    @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  auditLogs    AuditLog[]
+
+  @@map("users")
+}
+
+model Taxonomy {
+  id                     String           @id @default(cuid())
+  normalizedKey          String           @unique
+  taxClass               String?
+  taxOrder               String?
+  family                 String?
+  taxon                  String?
+  taxonAuthor            String?
+  verbatimIdentification String?
+  searchLabel            String?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  specimenRecords        SpecimenRecord[]
+
+  @@index([taxClass])
+  @@index([taxOrder])
+  @@index([family])
+  @@index([taxon])
+  @@map("taxonomies")
+}
+
+model Location {
+  id                 String           @id @default(cuid())
+  normalizedKey      String           @unique
+  siteName           String?
+  provinceOrDistrict String?
+  region             String?
+  country            String?
+  continentOrPlate   String?
+  waterBody          String?
+  oceanSea           String?
+  latitudeRaw        String?
+  longitudeRaw       String?
+  latitude           Float?
+  longitude          Float?
+  radiusKmRaw        String?
+  radiusKm           Float?
+  hasValidCoordinates Boolean         @default(false)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  specimenRecords    SpecimenRecord[]
+
+  @@index([country])
+  @@index([region])
+  @@index([siteName])
+  @@index([waterBody])
+  @@index([oceanSea])
+  @@index([hasValidCoordinates])
+  @@index([latitude, longitude])
+  @@map("locations")
+}
+
+model Person {
+  id                 String           @id @default(cuid())
+  name               String
+  normalizedName     String           @unique
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  collectedRecords   SpecimenRecord[] @relation("CollectorRecords")
+  identifiedRecords  SpecimenRecord[] @relation("IdentifierRecords")
+
+  @@map("persons")
+}
+
+model ImportBatch {
+  id            String           @id @default(cuid())
+  sourceFile    String
+  sourceHash    String?
+  sourceType    String           @default("excel")
+  sheetName     String?
+  startedAt     DateTime         @default(now())
+  finishedAt    DateTime?
+  dryRun        Boolean          @default(true)
+  status        ImportStatus     @default(PENDING)
+  totalRows     Int              @default(0)
+  processedRows Int              @default(0)
+  createdCount  Int              @default(0)
+  updatedCount  Int              @default(0)
+  skippedCount  Int              @default(0)
+  archivedCount Int              @default(0)
+  errorCount    Int              @default(0)
+  warningCount  Int              @default(0)
+  summary       Json?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  specimenRecords SpecimenRecord[]
+  issues        ImportIssue[]
+  auditLogs     AuditLog[]
+
+  @@index([startedAt])
+  @@map("import_batches")
+}
+
+model ImportIssue {
+  id         String         @id @default(cuid())
+  batchId    String
+  batch      ImportBatch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  severity   ImportSeverity
+  code       String
+  message    String         @db.Text
+  field      String?
+  rawValue   String?        @db.Text
+  rowNumber  Int?
+  importKey  String?
+  createdAt  DateTime       @default(now())
+
+  @@index([batchId, severity])
+  @@index([rowNumber])
+  @@map("import_issues")
+}
+
+model SpecimenRecord {
+  id                  String                    @id @default(cuid())
+  importKey           String                    @unique
+  importKeySource     ImportKeySource
+  sourceRowNumber     Int?
+  importBatchId       String?
+  importBatch         ImportBatch?              @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  oid                 String?
+  register            String?
+  stratigraphy        String?
+  taxonomyId          String?
+  taxonomy            Taxonomy?                 @relation(fields: [taxonomyId], references: [id], onDelete: SetNull)
+  locationId          String?
+  location            Location?                 @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  collectorPersonId   String?
+  collectorPerson     Person?                   @relation("CollectorRecords", fields: [collectorPersonId], references: [id], onDelete: SetNull)
+  identifierPersonId  String?
+  identifierPerson    Person?                   @relation("IdentifierRecords", fields: [identifierPersonId], references: [id], onDelete: SetNull)
+  typeStatus          String?
+  typeStatusNormalized String?
+  citedFigure         String?
+  hasCitedFigure      Boolean?
+  donorCollection     String?
+  collectorRecorderRaw String?
+  identifiedByRaw     String?
+  specimenCountRaw    String?
+  specimenCount       Int?
+  minDepthMRaw        String?
+  maxDepthMRaw        String?
+  minDepthM           Float?
+  maxDepthM           Float?
+  notes               String?                   @db.Text
+  imageAuthor         String?
+  collectionDateRaw   String?
+  parsedYear          Int?
+  parsedMonth         Int?
+  parsedDay           Int?
+  datePrecision       DatePrecision             @default(UNKNOWN)
+  dateQualifier       String?
+  searchText          String?                   @db.Text
+  rawData             Json?
+  archivedAt          DateTime?
+  lastImportedAt      DateTime?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  images              ImageAsset[]
+  references          BibliographicReference[]
+  auditLogs           AuditLog[]
+
+  @@index([register])
+  @@index([oid])
+  @@index([parsedYear])
+  @@index([archivedAt])
+  @@index([typeStatusNormalized])
+  @@index([taxonomyId])
+  @@index([locationId])
+  @@index([collectorPersonId])
+  @@index([identifierPersonId])
+  @@map("specimen_records")
+}
+
+model ImageAsset {
+  id            String          @id @default(cuid())
+  specimenRecordId String
+  specimenRecord SpecimenRecord @relation(fields: [specimenRecordId], references: [id], onDelete: Cascade)
+  position      Int
+  originalValue String          @db.Text
+  url           String?         @db.Text
+  fileName      String?
+  isUrl         Boolean         @default(false)
+  author        String?
+  createdAt     DateTime        @default(now())
+
+  @@unique([specimenRecordId, position])
+  @@index([specimenRecordId])
+  @@map("image_assets")
+}
+
+model BibliographicReference {
+  id                String          @id @default(cuid())
+  specimenRecordId  String
+  specimenRecord    SpecimenRecord  @relation(fields: [specimenRecordId], references: [id], onDelete: Cascade)
+  position          Int
+  citation          String          @db.Text
+  normalizedCitation String?
+  createdAt         DateTime        @default(now())
+
+  @@unique([specimenRecordId, position])
+  @@index([specimenRecordId])
+  @@map("bibliographic_references")
+}
+
+model AuditLog {
+  id               String           @id @default(cuid())
+  userId           String?
+  user             User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  specimenRecordId String?
+  specimenRecord   SpecimenRecord?  @relation(fields: [specimenRecordId], references: [id], onDelete: SetNull)
+  batchId          String?
+  batch            ImportBatch?     @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  action           AuditAction
+  entityType       String
+  entityId         String
+  metadata         Json?
+  diff             Json?
+  createdAt        DateTime         @default(now())
+
+  @@index([specimenRecordId, createdAt])
+  @@index([batchId, createdAt])
+  @@index([userId, createdAt])
+  @@map("audit_logs")
+}

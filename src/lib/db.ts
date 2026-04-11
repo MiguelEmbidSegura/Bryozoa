@@ -8,11 +8,8 @@ const globalForPrisma = globalThis as typeof globalThis & {
 };
 
 function createPrismaClient() {
-  // Create a long-lived pg Pool (external to Prisma)
-  const connectionString = process.env.DATABASE_URL?.replace(
-    /[?&]sslmode=\w+/i,
-    ""
-  );
+  // Keep provider-specific connection params such as sslmode=require.
+  const connectionString = process.env.DATABASE_URL;
 
   const pool =
     globalForPrisma.pgPool ??

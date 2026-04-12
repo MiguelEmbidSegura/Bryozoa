@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { ImportStatus } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/db";
 import {
@@ -5,6 +8,7 @@ import {
   AUTO_BOOTSTRAP_STALE_MS,
   DEFAULT_BOOTSTRAP_RECORD_FLOOR,
   DEFAULT_BOOTSTRAP_WORKBOOK_URL,
+  LOCAL_WORKBOOK_PATH,
 } from "@/lib/constants";
 import { downloadRemoteWorkbook } from "@/lib/import/remote";
 import { importBryozoaWorkbook } from "@/lib/import/service";
@@ -307,6 +311,35 @@ export async function ensureCatalogBootstrapBatch() {
   return { batchId: batch.id, shouldStart: true };
 }
 
+function getLocalWorkbookCandidates() {
+  const candidates = [
+    resolve(process.cwd(), "ALL_Bryozoa.xlsx"),
+    resolve(process.cwd(), "data", "ALL_Bryozoa.xlsx"),
+  ];
+
+  if (LOCAL_WORKBOOK_PATH.trim()) {
+    candidates.unshift(resolve(LOCAL_WORKBOOK_PATH.trim()));
+  }
+
+  return candidates;
+}
+
+async function loadLocalWorkbook() {
+  const candidates = getLocalWorkbookCandidates();
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      const buffer = await readFile(candidate);
+      if (buffer.length > 0) {
+        const fileName = candidate.split(/[\\/]/).at(-1) ?? "local-workbook.xlsx";
+        console.log(`[catalog-bootstrap] Using local workbook: ${candidate}`);
+        return { buffer, fileName, filePath: candidate };
+      }
+    }
+  }
+  return null;
+}
+
 export async function runCatalogBootstrapImport(batchId: string) {
   await prisma.importBatch.update({
     where: { id: batchId },
@@ -324,19 +357,30 @@ export async function runCatalogBootstrapImport(batchId: string) {
   });
 
   try {
-    const remoteWorkbook = await downloadRemoteWorkbook(DEFAULT_BOOTSTRAP_WORKBOOK_URL);
+    // Try local workbook first, then fall back to remote download.
+    const localWorkbook = await loadLocalWorkbook();
+
+    const workbookSource = localWorkbook
+      ? {
+          buffer: localWorkbook.buffer,
+          fileName: localWorkbook.fileName,
+          sourceUrl: `file://${localWorkbook.filePath}`,
+        }
+      : await downloadRemoteWorkbook(DEFAULT_BOOTSTRAP_WORKBOOK_URL);
 
     await importBryozoaWorkbook({
-      buffer: remoteWorkbook.buffer,
-      fileName: remoteWorkbook.fileName,
+      buffer: workbookSource.buffer,
+      fileName: workbookSource.fileName,
       dryRun: false,
       initiatedByUserId: null,
       sourceType: AUTO_BOOTSTRAP_SOURCE_TYPE,
-      sourceUrl: DEFAULT_BOOTSTRAP_WORKBOOK_URL,
+      sourceUrl: "sourceUrl" in workbookSource ? workbookSource.sourceUrl : DEFAULT_BOOTSTRAP_WORKBOOK_URL,
       existingBatchId: batchId,
       progressEveryRows: 250,
     });
   } catch (error) {
+    console.error("[catalog-bootstrap] Import failed:", error instanceof Error ? error.message : error);
+
     const batch = await prisma.importBatch.findUnique({
       where: { id: batchId },
       select: {

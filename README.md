@@ -145,19 +145,19 @@ Open:
 Dry run:
 
 ```bash
-npm run import:bryozoa -- --file "c:/Users/PRT/Downloads/ALL_Bryozoa_Synthesys-Miguel_fusionado.xlsx" --dry-run
+npm run import:bryozoa -- --file "c:/Users/PRT/Downloads/ALL_Bryozoa.xlsx" --dry-run
 ```
 
 Commit import:
 
 ```bash
-npm run import:bryozoa -- --file "c:/Users/PRT/Downloads/ALL_Bryozoa_Synthesys-Miguel_fusionado.xlsx" --commit
+npm run import:bryozoa -- --file "c:/Users/PRT/Downloads/ALL_Bryozoa.xlsx" --commit
 ```
 
 Limit rows for testing:
 
 ```bash
-npm run import:bryozoa -- --file "c:/Users/PRT/Downloads/ALL_Bryozoa_Synthesys-Miguel_fusionado.xlsx" --dry-run --limit 250
+npm run import:bryozoa -- --file "c:/Users/PRT/Downloads/ALL_Bryozoa.xlsx" --dry-run --limit 250
 ```
 
 The same import service is also available from `/admin/imports` via file upload.
@@ -179,6 +179,75 @@ npm run prisma:push
 npm run db:seed
 npm run import:bryozoa -- --file "<path-to-xlsx>" --dry-run
 ```
+
+## Update GitHub and Vercel
+
+Current repo defaults:
+
+- Git remote: `origin -> https://github.com/MiguelEmbidSegura/Bryozoa.git`
+- Main branch: `main`
+
+Recommended flow to update GitHub safely:
+
+```bash
+git status
+git pull --rebase origin main
+git add README.md src/
+git commit -m "Describe your change"
+git push origin main
+```
+
+If you want to publish all local changes that are not ignored:
+
+```bash
+git add -A
+git commit -m "Describe your change"
+git push origin main
+```
+
+Important:
+
+- Avoid `git add .` if you do not want to upload local files such as `ALL_Bryozoa.xlsx`
+- A push to `main` is the usual trigger for updating GitHub and, if connected, Vercel production too
+
+If Vercel is already connected to GitHub:
+
+- `git push origin main` should trigger a production deployment
+- pushing another branch usually creates a preview deployment
+
+Manual Vercel deploy with CLI:
+
+```bash
+npm install -g vercel
+vercel login
+vercel link
+vercel
+vercel --prod
+```
+
+Useful Vercel commands:
+
+```bash
+vercel env ls
+vercel env pull .env.vercel.local
+vercel list
+vercel logs
+```
+
+Environment variables to configure in Vercel:
+
+- `DATABASE_URL`
+- `APP_URL`
+- `AUTH_SECRET`
+- `ADMIN_SEED_EMAIL`
+- `ADMIN_SEED_PASSWORD`
+- `NEXT_PUBLIC_MAP_TILE_URL`
+- `NEXT_PUBLIC_MAP_ATTRIBUTION`
+
+Deployment notes:
+
+- In Vercel you need an external PostgreSQL database; the local embedded database from `npm run db:start` is only for local development
+- Set `APP_URL` to your real Vercel URL or custom domain, not `http://localhost:3000`
 
 ## Docker Compose
 
@@ -230,5 +299,4 @@ npm run test
   - mixed/typoed date qualifiers
 - local verification now uses the embedded PostgreSQL bootstrap behind `npm run db:start`
 - if you prefer Prisma Dev instead of the embedded server, `npm run db:start:prisma-dev` remains available as a fallback
-
 

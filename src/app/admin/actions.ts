@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { loginWithCredentials, logout, requireAdmin } from "@/lib/auth";
@@ -11,7 +10,6 @@ import {
   saveSpecimenRecord,
   setRecordArchived,
 } from "@/lib/admin-data";
-import { importBryozoaWorkbook } from "@/lib/import/service";
 import {
   loginSchema,
   recordFormSchema,
@@ -99,31 +97,4 @@ export async function archiveRecordAction(formData: FormData) {
   const archived = formData.get("archived") === "true";
   await setRecordArchived(recordId, archived, session.userId);
   redirect(`/admin/records/${recordId}`);
-}
-
-export async function importWorkbookAction(formData: FormData) {
-  const session = await requireAdmin();
-  const file = formData.get("file");
-  const dryRun = formData.get("dryRun") === "on";
-  const redirectTo = getRedirectTarget(formData, "/admin/imports");
-
-  if (!(file instanceof File) || file.size === 0) {
-    redirect(`${redirectTo}?error=missing-file`);
-  }
-
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const summary = await importBryozoaWorkbook({
-    buffer,
-    fileName: file.name,
-    dryRun,
-    initiatedByUserId: session.userId,
-  });
-
-  revalidatePath("/");
-
-  if (redirectTo === "/") {
-    redirect("/");
-  }
-
-  redirect(`/admin/imports?batch=${summary.batchId}`);
 }

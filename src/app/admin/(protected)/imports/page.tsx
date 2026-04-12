@@ -6,6 +6,22 @@ import { getImportHistory } from "@/lib/admin-data";
 
 export const maxDuration = 300;
 
+function getImportErrorMessage(
+  error?: string,
+  message?: string | string[],
+) {
+  switch (error) {
+    case "missing-file":
+      return "Choose an Excel workbook before running the import.";
+    case "import-failed":
+      return typeof message === "string" && message.trim().length > 0
+        ? message
+        : "The workbook could not be imported. Check the server logs for more detail.";
+    default:
+      return undefined;
+  }
+}
+
 async function loadAdminImportsPageData() {
   try {
     const batches = await getImportHistory();
@@ -28,6 +44,10 @@ export default async function AdminImportsPage({
   const result = await loadAdminImportsPageData();
   const highlightedBatchId =
     typeof resolvedSearchParams.batch === "string" ? resolvedSearchParams.batch : undefined;
+  const errorMessage = getImportErrorMessage(
+    typeof resolvedSearchParams.error === "string" ? resolvedSearchParams.error : undefined,
+    resolvedSearchParams.message,
+  );
 
   if (result.databaseUnavailable) {
     return <DatabaseSetupState title="Imports admin is waiting for the database" />;
@@ -48,7 +68,7 @@ export default async function AdminImportsPage({
 
       <Card>
         <CardContent className="space-y-4">
-          <ImportUploadForm />
+          <ImportUploadForm errorMessage={errorMessage} />
           <p className="text-sm text-[var(--muted-foreground)]">
             Dry runs store issues and counts without touching specimen records, which makes them
             useful as a preview workflow for non-technical curators.

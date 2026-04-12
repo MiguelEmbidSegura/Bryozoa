@@ -117,7 +117,28 @@ async function loadHomePageData() {
   }
 }
 
-export default async function HomePage() {
+function getImportErrorMessage(
+  error?: string,
+  message?: string | string[],
+) {
+  switch (error) {
+    case "missing-file":
+      return "Choose an Excel workbook before starting the import.";
+    case "import-failed":
+      return typeof message === "string" && message.trim().length > 0
+        ? message
+        : "The workbook could not be imported. Open the admin imports page to inspect the failure.";
+    default:
+      return undefined;
+  }
+}
+
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const result = await loadHomePageData();
 
   if (result.databaseUnavailable) {
@@ -128,6 +149,10 @@ export default async function HomePage() {
     return (
       <InitialCatalogSetup
         isAuthenticated={result.isAuthenticated}
+        importErrorMessage={getImportErrorMessage(
+          typeof resolvedSearchParams?.error === "string" ? resolvedSearchParams.error : undefined,
+          resolvedSearchParams?.message,
+        )}
         latestBatch={result.latestBatch}
       />
     );

@@ -15,9 +15,11 @@ type SetupBatchPreview = {
 export function InitialCatalogSetup({
   isAuthenticated,
   latestBatch,
+  importErrorMessage,
 }: {
   isAuthenticated: boolean;
   latestBatch?: SetupBatchPreview | null;
+  importErrorMessage?: string;
 }) {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-10 sm:px-6 lg:px-8">
@@ -101,6 +103,7 @@ export function InitialCatalogSetup({
                 <ImportUploadForm
                   defaultDryRun={false}
                   redirectTo="/"
+                  errorMessage={importErrorMessage}
                   showDryRun={false}
                   submitLabel="Import Excel and open catalogue"
                 />

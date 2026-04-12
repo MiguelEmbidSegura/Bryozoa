@@ -17,7 +17,7 @@ export default function AdminLoginPage() {
               Sign in to edit records, preview imports, review logs and manage users.
             </p>
           </div>
-          <LoginForm />
+          <LoginForm redirectTo="/admin/imports" />
         </CardContent>
       </Card>
     </div>

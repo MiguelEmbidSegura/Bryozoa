@@ -52,9 +52,10 @@ export function InitialCatalogSetup({
 
               <div className="rounded-[24px] border border-[var(--border)] bg-[var(--muted)] p-5">
                 <FileSpreadsheet className="h-5 w-5 text-[var(--accent)]" />
-                <p className="mt-3 font-medium text-[var(--foreground)]">2. Choose the Excel</p>
+                <p className="mt-3 font-medium text-[var(--foreground)]">2. Choose the workbook</p>
                 <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                  Upload the `.xlsx` workbook that contains the Bryozoa records.
+                  Upload the `.xlsx` file or paste a public Google Sheets link with the Bryozoa
+                  records.
                 </p>
               </div>
 

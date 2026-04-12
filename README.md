@@ -162,6 +162,25 @@ npm run import:bryozoa -- --file "c:/Users/PRT/Downloads/ALL_Bryozoa.xlsx" --dry
 
 The same import service is also available from `/admin/imports` via file upload.
 
+Vercel note:
+
+- Vercel serverless functions reject inbound payloads larger than `4.5 MB`
+- if your workbook is larger than that, use the new `Import from URL` option in `/admin/imports`
+- this lets the server download the `.xlsx` from a public URL instead of receiving the whole file in the request body
+- the web form now accepts Google Sheets share links directly and converts them to the `.xlsx` export automatically
+
+Import directly from a public URL:
+
+```bash
+npm run import:bryozoa -- --url "https://example.com/ALL_Bryozoa.xlsx" --commit
+```
+
+Import directly from a Google Sheets share link:
+
+```bash
+npm run import:bryozoa -- --url "https://docs.google.com/spreadsheets/d/1aLwM2E2FZoIP-_9Gp7DZ7-j1q5QPn_b4/edit?usp=sharing" --commit
+```
+
 ## Useful scripts
 
 ```bash
@@ -299,4 +318,3 @@ npm run test
   - mixed/typoed date qualifiers
 - local verification now uses the embedded PostgreSQL bootstrap behind `npm run db:start`
 - if you prefer Prisma Dev instead of the embedded server, `npm run db:start:prisma-dev` remains available as a fallback
-

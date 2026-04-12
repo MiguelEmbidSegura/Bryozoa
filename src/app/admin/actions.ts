@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { loginWithCredentials, logout, requireAdmin } from "@/lib/auth";
+import { toReadableDatabaseError } from "@/lib/db-errors";
 import {
   deleteRecord,
   saveAdminUser,
@@ -51,7 +52,13 @@ export async function loginAction(
     return { error: "Please enter a valid email and password." };
   }
 
-  const user = await loginWithCredentials(parsed.data.email, parsed.data.password);
+  let user;
+
+  try {
+    user = await loginWithCredentials(parsed.data.email, parsed.data.password);
+  } catch (error) {
+    return { error: toReadableDatabaseError(error) };
+  }
 
   if (!user) {
     return { error: "Invalid credentials." };

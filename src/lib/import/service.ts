@@ -21,6 +21,10 @@ type ImportOptions = ExcelInput & {
   dryRun?: boolean;
   limit?: number;
   initiatedByUserId?: string | null;
+  sourceType?: string;
+  sourceUrl?: string | null;
+  existingBatchId?: string;
+  progressEveryRows?: number;
 };
 
 export type ImportSummary = {
@@ -37,6 +41,25 @@ export type ImportSummary = {
   sheetName: string;
   issuesPreview: ImportIssueDraft[];
 };
+
+function asSummaryObject(value: unknown) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return {};
+}
+
+function buildProgressSummary(
+  baseSummary: Record<string, unknown>,
+  extra: Record<string, unknown> = {},
+) {
+  return {
+    ...baseSummary,
+    ...extra,
+    progressUpdatedAt: new Date().toISOString(),
+  };
+}
 
 async function loadCache() {
   const taxonomies = await prisma.taxonomy.findMany({ select: { id: true, normalizedKey: true } });
@@ -147,18 +170,62 @@ export async function importBryozoaWorkbook(options: ImportOptions): Promise<Imp
   const dryRun = options.dryRun ?? true;
   const excel = await readExcelSource(options);
   const missingHeaders = REQUIRED_HEADERS.filter((header) => !excel.headers.includes(header));
-  const batch = await prisma.importBatch.create({
-    data: {
-      sourceFile: excel.fileName,
-      sourceHash: excel.sourceHash,
-      sheetName: excel.sheetName,
-      dryRun,
-      status: ImportStatus.RUNNING,
-      totalRows: excel.totalRows,
-      summary: { headers: excel.headers, missingHeaders },
-    },
-    select: { id: true },
-  });
+  const batchSummaryBase = {
+    ...asSummaryObject(undefined),
+    headers: excel.headers,
+    missingHeaders,
+    sourceUrl: options.sourceUrl ?? null,
+    sourceType: options.sourceType ?? "excel",
+    phase: "importing",
+    autoBootstrap: options.sourceType === "auto-bootstrap",
+  };
+  const batchId = options.existingBatchId
+    ? options.existingBatchId
+    : (
+        await prisma.importBatch.create({
+          data: {
+            sourceFile: excel.fileName,
+            sourceHash: excel.sourceHash,
+            sourceType: options.sourceType ?? "excel",
+            sheetName: excel.sheetName,
+            dryRun,
+            status: ImportStatus.RUNNING,
+            totalRows: excel.totalRows,
+            summary: buildProgressSummary(batchSummaryBase),
+          },
+          select: { id: true },
+        })
+      ).id;
+
+  if (options.existingBatchId) {
+    const existingBatch = await prisma.importBatch.findUnique({
+      where: { id: options.existingBatchId },
+      select: { summary: true },
+    });
+
+    await prisma.importBatch.update({
+      where: { id: options.existingBatchId },
+      data: {
+        sourceFile: excel.fileName,
+        sourceHash: excel.sourceHash,
+        sourceType: options.sourceType ?? "excel",
+        sheetName: excel.sheetName,
+        dryRun,
+        status: ImportStatus.RUNNING,
+        totalRows: excel.totalRows,
+        processedRows: 0,
+        createdCount: 0,
+        updatedCount: 0,
+        skippedCount: 0,
+        errorCount: missingHeaders.length,
+        warningCount: 0,
+        summary: buildProgressSummary({
+          ...asSummaryObject(existingBatch?.summary),
+          ...batchSummaryBase,
+        }),
+      },
+    });
+  }
 
   const caches = await loadCache();
   const issuesBuffer: ImportIssueDraft[] = [];
@@ -168,6 +235,27 @@ export async function importBryozoaWorkbook(options: ImportOptions): Promise<Imp
   let skippedCount = 0;
   let errorCount = missingHeaders.length;
   let warningCount = 0;
+  const progressEveryRows = Math.max(1, options.progressEveryRows ?? 250);
+
+  async function flushProgress() {
+    await prisma.importBatch.update({
+      where: { id: batchId },
+      data: {
+        status: ImportStatus.RUNNING,
+        processedRows,
+        createdCount,
+        updatedCount,
+        skippedCount,
+        errorCount,
+        warningCount,
+        summary: buildProgressSummary(batchSummaryBase, {
+          phase: "importing",
+          sourceFile: excel.fileName,
+          sheetName: excel.sheetName,
+        }),
+      },
+    });
+  }
 
   for (const header of missingHeaders) {
     issuesBuffer.push({
@@ -216,7 +304,7 @@ export async function importBryozoaWorkbook(options: ImportOptions): Promise<Imp
             update: {
               importKeySource: prepared.importKeySource,
               sourceRowNumber: rowNumber,
-              importBatchId: batch.id,
+              importBatchId: batchId,
               taxonomyId,
               locationId,
               collectorPersonId,
@@ -228,7 +316,7 @@ export async function importBryozoaWorkbook(options: ImportOptions): Promise<Imp
               importKey: prepared.importKey,
               importKeySource: prepared.importKeySource,
               sourceRowNumber: rowNumber,
-              importBatchId: batch.id,
+              importBatchId: batchId,
               taxonomyId,
               locationId,
               collectorPersonId,
@@ -289,14 +377,19 @@ export async function importBryozoaWorkbook(options: ImportOptions): Promise<Imp
       }
 
       if (issuesBuffer.length >= 250) {
-        await flushIssues(batch.id, issuesBuffer);
+        await flushIssues(batchId, issuesBuffer);
+      }
+
+      if (processedRows % progressEveryRows === 0) {
+        await flushProgress();
       }
     }
 
-    await flushIssues(batch.id, issuesBuffer);
+    await flushIssues(batchId, issuesBuffer);
+    await flushProgress();
 
     const issuesPreview = await prisma.importIssue.findMany({
-      where: { batchId: batch.id },
+      where: { batchId },
       orderBy: [{ severity: "desc" }, { rowNumber: "asc" }],
       take: 25,
       select: {
@@ -311,7 +404,7 @@ export async function importBryozoaWorkbook(options: ImportOptions): Promise<Imp
     });
 
     const summary = {
-      batchId: batch.id,
+      batchId,
       sourceFile: excel.fileName,
       dryRun,
       totalRows: excel.totalRows,
@@ -326,7 +419,7 @@ export async function importBryozoaWorkbook(options: ImportOptions): Promise<Imp
     } satisfies ImportSummary;
 
     await prisma.importBatch.update({
-      where: { id: batch.id },
+      where: { id: batchId },
       data: {
         finishedAt: new Date(),
         status: dryRun ? ImportStatus.DRY_RUN : ImportStatus.COMPLETED,
@@ -336,27 +429,30 @@ export async function importBryozoaWorkbook(options: ImportOptions): Promise<Imp
         skippedCount,
         errorCount,
         warningCount,
-        summary,
+        summary: buildProgressSummary(batchSummaryBase, {
+          ...summary,
+          phase: dryRun ? "preview-complete" : "completed",
+        }),
       },
     });
 
     await writeAuditLog({
       userId: options.initiatedByUserId ?? null,
-      batchId: batch.id,
+      batchId,
       action: AuditAction.IMPORT,
       entityType: "ImportBatch",
-      entityId: batch.id,
+      entityId: batchId,
       metadata: summary,
     });
 
-    await persistImportLog(batch.id, summary);
+    await persistImportLog(batchId, summary);
 
     return summary;
   } catch (error) {
-    await flushIssues(batch.id, issuesBuffer);
+    await flushIssues(batchId, issuesBuffer);
 
     await prisma.importBatch.update({
-      where: { id: batch.id },
+      where: { id: batchId },
       data: {
         finishedAt: new Date(),
         status: ImportStatus.FAILED,
@@ -366,9 +462,10 @@ export async function importBryozoaWorkbook(options: ImportOptions): Promise<Imp
         skippedCount,
         errorCount: errorCount + 1,
         warningCount,
-        summary: {
+        summary: buildProgressSummary(batchSummaryBase, {
+          phase: "failed",
           fatalError: error instanceof Error ? error.message : "Unexpected import failure.",
-        },
+        }),
       },
     });
 

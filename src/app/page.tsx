@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { ArrowRight, Globe, Map, Search, Trees } from "lucide-react";
-import { InitialCatalogSetup } from "@/components/shared/initial-catalog-setup";
+import { CatalogBootstrapState } from "@/components/shared/catalog-bootstrap-state";
 import { MappedRecordsPreview } from "@/components/home/mapped-records-preview";
 import { RecordSummaryCard } from "@/components/records/record-summary-card";
 import { DatabaseSetupState } from "@/components/shared/database-setup-state";
 import { StatCard } from "@/components/shared/stat-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { getCatalogBootstrapStatus } from "@/lib/catalog-bootstrap";
 import { isDatabaseConnectionError } from "@/lib/db-errors";
 import { getHomeData } from "@/lib/records";
 import { formatNumber } from "@/lib/utils";
@@ -18,32 +18,16 @@ export const maxDuration = 300;
 
 async function loadHomePageData() {
   try {
-    const home = await getHomeData();
+    const bootstrap = await getCatalogBootstrapStatus();
 
-    if (home.stats.totalRecords === 0) {
-      const [session, latestBatch] = await Promise.all([
-        getSession(),
-        prisma.importBatch.findFirst({
-          orderBy: { startedAt: "desc" },
-          select: {
-            sourceFile: true,
-            status: true,
-            processedRows: true,
-            errorCount: true,
-            warningCount: true,
-            dryRun: true,
-          },
-        }),
-      ]);
-
+    if (bootstrap.state !== "ready") {
       return {
-        initialSetupRequired: true as const,
-        isAuthenticated: Boolean(session && session.role === "ADMIN"),
-        latestBatch,
+        bootstrap,
         databaseUnavailable: false as const,
       };
     }
 
+    const home = await getHomeData();
     const highlights = await prisma.specimenRecord.findMany({
       where: { archivedAt: null, images: { some: {} } },
       take: 3,
@@ -145,16 +129,23 @@ export default async function HomePage({
     return <DatabaseSetupState />;
   }
 
-  if ("initialSetupRequired" in result && result.initialSetupRequired) {
+  if ("bootstrap" in result && result.bootstrap) {
+    const importErrorMessage = getImportErrorMessage(
+      typeof resolvedSearchParams?.error === "string" ? resolvedSearchParams.error : undefined,
+      resolvedSearchParams?.message,
+    );
+
     return (
-      <InitialCatalogSetup
-        isAuthenticated={result.isAuthenticated}
-        importErrorMessage={getImportErrorMessage(
-          typeof resolvedSearchParams?.error === "string" ? resolvedSearchParams.error : undefined,
-          resolvedSearchParams?.message,
-        )}
-        latestBatch={result.latestBatch}
-      />
+      <>
+        {importErrorMessage ? (
+          <div className="mx-auto w-full max-w-5xl px-4 pt-8 sm:px-6 lg:px-8">
+            <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {importErrorMessage}
+            </p>
+          </div>
+        ) : null}
+        <CatalogBootstrapState initialStatus={result.bootstrap} />
+      </>
     );
   }
 

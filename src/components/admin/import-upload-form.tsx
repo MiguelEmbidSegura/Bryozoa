@@ -1,10 +1,8 @@
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 type ImportUploadFormProps = {
-  defaultDryRun?: boolean;
   redirectTo?: string;
   showDryRun?: boolean;
   submitLabel?: string;
@@ -12,10 +10,9 @@ type ImportUploadFormProps = {
 };
 
 export function ImportUploadForm({
-  defaultDryRun = true,
   redirectTo = "/admin/imports",
   showDryRun = true,
-  submitLabel = "Run import",
+  submitLabel = "Import into catalogue",
   errorMessage,
 }: ImportUploadFormProps) {
   const isVercel = process.env.VERCEL === "1";
@@ -25,6 +22,13 @@ export function ImportUploadForm({
       {errorMessage ? (
         <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {errorMessage}
+        </p>
+      ) : null}
+
+      {showDryRun ? (
+        <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Imports on this page write to the catalogue by default. Use <strong>Preview only</strong>{" "}
+          when you want to inspect counts and issues without changing the database.
         </p>
       ) : null}
 
@@ -47,13 +51,14 @@ export function ImportUploadForm({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <Button type="submit" name="dryRun" value="off">
+            {submitLabel}
+          </Button>
           {showDryRun ? (
-            <label className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-              <Checkbox name="dryRun" defaultChecked={defaultDryRun} />
-              Dry run / preview
-            </label>
+            <Button type="submit" name="dryRun" value="on" variant="secondary">
+              Preview only
+            </Button>
           ) : null}
-          <Button type="submit">{submitLabel}</Button>
         </div>
       </form>
 
@@ -85,15 +90,14 @@ export function ImportUploadForm({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {showDryRun ? (
-            <label className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-              <Checkbox name="dryRun" defaultChecked={defaultDryRun} />
-              Dry run / preview
-            </label>
-          ) : null}
-          <Button type="submit" variant="secondary">
-            Import from URL
+          <Button type="submit" name="dryRun" value="off" variant="secondary">
+            Import URL into catalogue
           </Button>
+          {showDryRun ? (
+            <Button type="submit" name="dryRun" value="on" variant="ghost">
+              Preview URL only
+            </Button>
+          ) : null}
         </div>
       </form>
     </div>

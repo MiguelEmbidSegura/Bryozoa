@@ -102,7 +102,6 @@ export function InitialCatalogSetup({
                   </p>
                 </div>
                 <ImportUploadForm
-                  defaultDryRun={false}
                   redirectTo="/"
                   errorMessage={importErrorMessage}
                   showDryRun={false}

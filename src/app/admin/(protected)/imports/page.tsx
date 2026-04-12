@@ -1,8 +1,9 @@
 import { ImportUploadForm } from "@/components/admin/import-upload-form";
 import { DatabaseSetupState } from "@/components/shared/database-setup-state";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { isDatabaseConnectionError } from "@/lib/db-errors";
 import { getImportHistory } from "@/lib/admin-data";
+import { isDatabaseConnectionError } from "@/lib/db-errors";
 
 export const maxDuration = 300;
 
@@ -54,6 +55,7 @@ export default async function AdminImportsPage({
   }
 
   const { batches } = result;
+  const latestBatch = batches[0];
 
   return (
     <div className="space-y-6">
@@ -70,11 +72,19 @@ export default async function AdminImportsPage({
         <CardContent className="space-y-4">
           <ImportUploadForm errorMessage={errorMessage} />
           <p className="text-sm text-[var(--muted-foreground)]">
-            Dry runs store issues and counts without touching specimen records, which makes them
-            useful as a preview workflow for non-technical curators.
+            Imports on this page commit by default. Use preview only when you want to inspect row
+            counts and issues without changing specimen records.
           </p>
         </CardContent>
       </Card>
+
+      {latestBatch?.dryRun ? (
+        <div className="rounded-[28px] border border-amber-200 bg-amber-50 px-6 py-5 text-sm text-amber-900">
+          The latest batch was <strong>preview only</strong>. It processed {latestBatch.processedRows}{" "}
+          rows but did not change the catalogue, so the active record count stays the same until
+          you run a committed import.
+        </div>
+      ) : null}
 
       <div className="space-y-4">
         {batches.map((batch) => (
@@ -86,12 +96,16 @@ export default async function AdminImportsPage({
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h3 className="font-semibold text-[var(--foreground)]">{batch.sourceFile}</h3>
-                  <p className="text-sm text-[var(--muted-foreground)]">
-                    {batch.dryRun ? "Dry run" : "Committed"} • {batch.status} • {batch.processedRows} rows
-                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
+                    <Badge className={batch.dryRun ? "bg-amber-100 text-amber-900" : undefined}>
+                      {batch.dryRun ? "Preview only" : "Committed"}
+                    </Badge>
+                    <span>{batch.status}</span>
+                    <span>{batch.processedRows} rows</span>
+                  </div>
                 </div>
                 <p className="text-sm text-[var(--muted-foreground)]">
-                  Created {batch.createdCount} • Updated {batch.updatedCount} • Errors {batch.errorCount}
+                  Created {batch.createdCount} | Updated {batch.updatedCount} | Errors {batch.errorCount}
                 </p>
               </div>
 
@@ -100,7 +114,7 @@ export default async function AdminImportsPage({
                   {batch.issues.map((issue) => (
                     <div key={issue.id} className="rounded-2xl bg-[var(--muted)] p-4 text-sm">
                       <p className="font-medium text-[var(--foreground)]">
-                        {issue.severity} • {issue.code}
+                        {issue.severity} | {issue.code}
                       </p>
                       <p className="text-[var(--muted-foreground)]">{issue.message}</p>
                     </div>

@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { DatabaseSetupState } from "@/components/shared/database-setup-state";
-import { getAdminDashboardData, getImportHistory } from "@/lib/admin-data";
-import { Card, CardContent } from "@/components/ui/card";
 import { StatCard } from "@/components/shared/stat-card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { getAdminDashboardData, getImportHistory } from "@/lib/admin-data";
 import { isDatabaseConnectionError } from "@/lib/db-errors";
 import { formatNumber } from "@/lib/utils";
 
@@ -30,6 +31,7 @@ export default async function AdminDashboardPage() {
   }
 
   const { stats, imports } = result;
+  const latestImport = imports[0];
 
   return (
     <div className="space-y-6">
@@ -43,12 +45,24 @@ export default async function AdminDashboardPage() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <StatCard label="Active records" value={formatNumber(stats.recordCount)} />
+        <StatCard
+          label="Active records"
+          value={formatNumber(stats.recordCount)}
+          hint={latestImport?.dryRun ? "Latest import was preview only" : undefined}
+        />
         <StatCard label="Archived" value={formatNumber(stats.archivedCount)} />
         <StatCard label="Imports" value={formatNumber(stats.importCount)} />
         <StatCard label="Users" value={formatNumber(stats.userCount)} />
         <StatCard label="Import errors" value={formatNumber(stats.recentIssues)} />
       </section>
+
+      {latestImport?.dryRun ? (
+        <div className="rounded-[28px] border border-amber-200 bg-amber-50 px-6 py-5 text-sm text-amber-900">
+          The most recent import was a <strong>preview only</strong> run. It processed{" "}
+          {latestImport.processedRows} rows but did not update the database, so active records
+          still shows {formatNumber(stats.recordCount)}.
+        </div>
+      ) : null}
 
       <section className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
         <Card>
@@ -62,7 +76,7 @@ export default async function AdminDashboardPage() {
               </Link>
               <Link href="/admin/imports">
                 <Button variant="secondary" className="w-full">
-                  Preview Excel import
+                  Import Excel
                 </Button>
               </Link>
               <Link href="/admin/users">
@@ -92,9 +106,12 @@ export default async function AdminDashboardPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="font-medium text-[var(--foreground)]">{batch.sourceFile}</p>
-                      <p className="text-sm text-[var(--muted-foreground)]">
-                        {batch.dryRun ? "Dry run" : "Committed"} • {batch.processedRows} processed
-                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
+                        <Badge className={batch.dryRun ? "bg-amber-100 text-amber-900" : undefined}>
+                          {batch.dryRun ? "Preview only" : "Committed"}
+                        </Badge>
+                        <span>{batch.processedRows} processed</span>
+                      </div>
                     </div>
                     <span className="text-sm text-[var(--muted-foreground)]">{batch.status}</span>
                   </div>

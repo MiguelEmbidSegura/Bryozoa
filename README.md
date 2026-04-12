@@ -181,6 +181,45 @@ Import directly from a Google Sheets share link:
 npm run import:bryozoa -- --url "https://docs.google.com/spreadsheets/d/1aLwM2E2FZoIP-_9Gp7DZ7-j1q5QPn_b4/edit?usp=sharing" --commit
 ```
 
+### Import from the web on Vercel
+
+Use this flow when the workbook is too large for a normal browser upload:
+
+1. Deploy the latest code to Vercel.
+2. Sign in as admin.
+3. Open `/admin/imports`.
+4. Use `Import from URL` instead of the file picker.
+5. Paste the public Google Sheets share link, for example:
+
+```text
+https://docs.google.com/spreadsheets/d/1aLwM2E2FZoIP-_9Gp7DZ7-j1q5QPn_b4/edit?usp=sharing&ouid=105020359161972775426&rtpof=true&sd=true
+```
+
+6. Disable `Dry run / preview` if you want to populate the real catalogue.
+7. Submit the import and wait for the batch to finish.
+
+Important:
+
+- the app now accepts the normal Google Sheets `.../edit?...` share URL directly
+- the server converts it automatically to the `.xlsx` export URL
+- the Google Sheet must be public enough to download without requiring a login
+
+### Why production can still show fewer records
+
+The public site does not read Google Sheets live. It reads the PostgreSQL database.
+
+That means:
+
+- fixing the upload flow does not backfill old production data by itself
+- if production still shows numbers such as `9,181` records, that production database has not completed the full committed import yet
+- once the import finishes against the production `DATABASE_URL`, the home page and explorer counts will reflect the full dataset
+
+Quick checks:
+
+- make sure the import was run with `Dry run / preview` disabled
+- make sure Vercel is pointing to the intended `DATABASE_URL`
+- make sure the import batch finishes as `COMPLETED`, not `DRY_RUN` or `FAILED`
+
 ## Useful scripts
 
 ```bash

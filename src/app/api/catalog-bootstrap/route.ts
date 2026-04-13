@@ -1,9 +1,5 @@
-import { after, NextResponse } from "next/server";
-import {
-  ensureCatalogBootstrapBatch,
-  getCatalogBootstrapStatus,
-  runCatalogBootstrapImport,
-} from "@/lib/catalog-bootstrap";
+import { NextResponse } from "next/server";
+import { getCatalogBootstrapStatus, runCatalogBootstrapImport } from "@/lib/catalog-bootstrap";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,22 +15,10 @@ export async function GET() {
 }
 
 export async function POST() {
-  const ensured = await ensureCatalogBootstrapBatch();
-
-  if (ensured.shouldStart && ensured.batchId) {
-    after(async () => {
-      try {
-        await runCatalogBootstrapImport(ensured.batchId!);
-      } catch (error) {
-        console.error("[catalog-bootstrap] Automatic import failed:", error);
-      }
-    });
-  }
-
+  await runCatalogBootstrapImport("manual-refresh");
   const status = await getCatalogBootstrapStatus();
 
   return NextResponse.json(status, {
-    status: ensured.shouldStart ? 202 : 200,
     headers: {
       "cache-control": "no-store",
     },

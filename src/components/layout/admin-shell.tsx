@@ -1,14 +1,11 @@
 import Link from "next/link";
-import { Database, FileSpreadsheet, Home, LayoutDashboard, LogOut, ScrollText, Users } from "lucide-react";
+import { Database, Home, LayoutDashboard, LogOut } from "lucide-react";
 import { logoutAction } from "@/app/admin/actions";
 import { Button } from "@/components/ui/button";
 
 const links = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/records", label: "Records", icon: Database },
-  { href: "/admin/imports", label: "Imports", icon: FileSpreadsheet },
-  { href: "/admin/users", label: "Users", icon: Users },
-  { href: "/admin/audit", label: "Audit", icon: ScrollText },
 ];
 
 export function AdminShell({

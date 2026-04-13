@@ -1,24 +1,14 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { getCatalogRecordById } from "@/lib/records";
 
 export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
   const { id } = await context.params;
-  const record = await prisma.specimenRecord.findUnique({
-    where: { id },
-    include: {
-      taxonomy: true,
-      location: true,
-      collectorPerson: true,
-      identifierPerson: true,
-      images: { orderBy: { position: "asc" } },
-      references: { orderBy: { position: "asc" } },
-    },
-  });
+  const record = await getCatalogRecordById(id);
 
-  if (!record || record.archivedAt) {
+  if (!record) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

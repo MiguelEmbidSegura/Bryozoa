@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Download, MapPinned } from "lucide-react";
-import { ImageGallery } from "@/components/records/image-gallery";
 import { RecordMap } from "@/components/map/record-map";
+import { ImageGallery } from "@/components/records/image-gallery";
 import { CopyLinkButton } from "@/components/shared/copy-link-button";
 import { DatabaseSetupState } from "@/components/shared/database-setup-state";
 import { Badge } from "@/components/ui/badge";
@@ -76,7 +76,7 @@ export default async function RecordDetailPage({
             <div className="flex flex-wrap gap-2">
               {record.typeStatus ? <Badge>{record.typeStatus}</Badge> : null}
               {hasCoordinates ? <Badge>Mapped</Badge> : null}
-              {record.importBatch ? <Badge>Imported</Badge> : <Badge>Manual</Badge>}
+              <Badge>Shared catalogue</Badge>
             </div>
             <div className="space-y-3">
               <p className="text-xs uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
@@ -86,7 +86,7 @@ export default async function RecordDetailPage({
                 {formatMaybe(record.taxonomy?.taxon)}
               </h1>
               <p className="text-lg text-[var(--muted-foreground)]">
-                {formatMaybe(record.taxonomy?.taxonAuthor)} • {formatMaybe(record.taxonomy?.family)}
+                {formatMaybe(record.taxonomy?.taxonAuthor)} | {formatMaybe(record.taxonomy?.family)}
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -168,7 +168,7 @@ export default async function RecordDetailPage({
                   latitude: record.location!.latitude!,
                   longitude: record.location!.longitude!,
                   title: record.taxonomy?.taxon ?? record.register ?? "Record",
-                  subtitle: [record.location?.country, record.location?.siteName].filter(Boolean).join(" • "),
+                  subtitle: [record.location?.country, record.location?.siteName].filter(Boolean).join(" | "),
                 },
               ]}
               heightClassName="h-72"

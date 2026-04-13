@@ -1,153 +1,28 @@
 import Link from "next/link";
 import { ArrowRight, Globe, Map, Search, Trees } from "lucide-react";
-import { CatalogBootstrapState } from "@/components/shared/catalog-bootstrap-state";
 import { MappedRecordsPreview } from "@/components/home/mapped-records-preview";
 import { RecordSummaryCard } from "@/components/records/record-summary-card";
-import { DatabaseSetupState } from "@/components/shared/database-setup-state";
 import { StatCard } from "@/components/shared/stat-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { prisma } from "@/lib/db";
-import { getCatalogBootstrapStatus } from "@/lib/catalog-bootstrap";
-import { isDatabaseConnectionError } from "@/lib/db-errors";
-import { getHomeData } from "@/lib/records";
+import { getHomeData, getHomeHighlights, getHomeMapPreview } from "@/lib/records";
 import { formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 async function loadHomePageData() {
-  try {
-    const bootstrap = await getCatalogBootstrapStatus();
+  const [home, highlights, mapPreviewMarkers] = await Promise.all([
+    getHomeData(),
+    getHomeHighlights(),
+    getHomeMapPreview(),
+  ]);
 
-    if (bootstrap.state !== "ready") {
-      return {
-        bootstrap,
-        databaseUnavailable: false as const,
-      };
-    }
-
-    const home = await getHomeData();
-    const highlights = await prisma.specimenRecord.findMany({
-      where: { archivedAt: null, images: { some: {} } },
-      take: 3,
-      orderBy: [{ parsedYear: "desc" }],
-      select: {
-        id: true,
-        register: true,
-        parsedYear: true,
-        typeStatus: true,
-        taxonomy: { select: { taxon: true, family: true, taxClass: true, taxOrder: true } },
-        location: {
-          select: {
-            siteName: true,
-            country: true,
-            region: true,
-            waterBody: true,
-            oceanSea: true,
-            hasValidCoordinates: true,
-          },
-        },
-        images: {
-          take: 1,
-          orderBy: { position: "asc" },
-          select: { originalValue: true, url: true, fileName: true, isUrl: true },
-        },
-        _count: { select: { images: true, references: true } },
-      },
-    });
-    const mappedPreviewRows = await prisma.specimenRecord.findMany({
-      where: { archivedAt: null, location: { is: { hasValidCoordinates: true } } },
-      take: 180,
-      orderBy: [{ parsedYear: "desc" }, { register: "asc" }],
-      select: {
-        id: true,
-        register: true,
-        taxonomy: { select: { taxon: true } },
-        location: {
-          select: {
-            latitude: true,
-            longitude: true,
-            country: true,
-            siteName: true,
-          },
-        },
-      },
-    });
-
-    const mapPreviewMarkers = mappedPreviewRows
-      .filter(
-        (item) =>
-          item.location?.latitude !== null &&
-          item.location?.latitude !== undefined &&
-          item.location?.longitude !== null &&
-          item.location?.longitude !== undefined,
-      )
-      .map((item) => ({
-        id: item.id,
-        latitude: item.location!.latitude!,
-        longitude: item.location!.longitude!,
-        title: item.taxonomy?.taxon ?? item.register ?? "Unknown",
-        subtitle: [item.location?.country, item.location?.siteName].filter(Boolean).join(" - "),
-      }));
-
-    return { home, highlights, mapPreviewMarkers, databaseUnavailable: false as const };
-  } catch (error) {
-    if (isDatabaseConnectionError(error)) {
-      return { databaseUnavailable: true as const };
-    }
-
-    throw error;
-  }
+  return { home, highlights, mapPreviewMarkers };
 }
 
-function getImportErrorMessage(
-  error?: string,
-  message?: string | string[],
-) {
-  switch (error) {
-    case "missing-file":
-      return "Choose a JSON or Excel file before starting the import.";
-    case "import-failed":
-      return typeof message === "string" && message.trim().length > 0
-        ? message
-        : "The selected file could not be imported. Open the admin imports page to inspect the failure.";
-    default:
-      return undefined;
-  }
-}
-
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+export default async function HomePage() {
   const result = await loadHomePageData();
-
-  if (result.databaseUnavailable) {
-    return <DatabaseSetupState />;
-  }
-
-  if ("bootstrap" in result && result.bootstrap) {
-    const importErrorMessage = getImportErrorMessage(
-      typeof resolvedSearchParams?.error === "string" ? resolvedSearchParams.error : undefined,
-      resolvedSearchParams?.message,
-    );
-
-    return (
-      <>
-        {importErrorMessage ? (
-          <div className="mx-auto w-full max-w-5xl px-4 pt-8 sm:px-6 lg:px-8">
-            <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {importErrorMessage}
-            </p>
-          </div>
-        ) : null}
-        <CatalogBootstrapState initialStatus={result.bootstrap} />
-      </>
-    );
-  }
 
   const { home, highlights, mapPreviewMarkers } = result;
 

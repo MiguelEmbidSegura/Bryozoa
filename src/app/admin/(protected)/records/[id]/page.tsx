@@ -75,8 +75,8 @@ export default async function AdminEditRecordPage({
       <Card>
         <CardContent className="space-y-2">
           <p className="text-sm text-[var(--muted-foreground)]">
-            Reimports update this record by deduplication key when possible. Manual edits are still
-            tracked in the audit log.
+            Changes update the shared catalogue source. With GitHub sync enabled, the save is
+            committed to the repository and becomes public after the next deployment.
           </p>
         </CardContent>
       </Card>

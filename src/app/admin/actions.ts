@@ -73,8 +73,7 @@ export async function logoutAction() {
 export async function saveRecordAction(values: RecordFormValues) {
   const session = await requireAdmin();
   const parsed = recordFormSchema.parse(values);
-  const id = await saveSpecimenRecord(parsed, session.userId);
-  return { id };
+  return saveSpecimenRecord(parsed, session.userId);
 }
 
 export async function saveUserAction(values: UserFormValues) {

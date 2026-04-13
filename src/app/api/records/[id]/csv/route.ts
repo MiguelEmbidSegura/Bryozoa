@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/db";
+import { getCatalogRecordById } from "@/lib/records";
 
 function csvEscape(value: unknown) {
   const stringValue = String(value ?? "");
@@ -10,19 +10,9 @@ export async function GET(
   context: { params: Promise<{ id: string }> },
 ) {
   const { id } = await context.params;
-  const record = await prisma.specimenRecord.findUnique({
-    where: { id },
-    include: {
-      taxonomy: true,
-      location: true,
-      collectorPerson: true,
-      identifierPerson: true,
-      images: { orderBy: { position: "asc" } },
-      references: { orderBy: { position: "asc" } },
-    },
-  });
+  const record = await getCatalogRecordById(id);
 
-  if (!record || record.archivedAt) {
+  if (!record) {
     return new Response("Not found", { status: 404 });
   }
 

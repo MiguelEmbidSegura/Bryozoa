@@ -1,11 +1,16 @@
 import { z } from "zod";
 
 const serverEnvSchema = z.object({
-  DATABASE_URL: z.string().min(1),
+  DATABASE_URL: z.string().min(1).optional(),
   APP_URL: z.string().url().default("http://localhost:3000"),
   AUTH_SECRET: z.string().min(16),
   ADMIN_SEED_EMAIL: z.string().email().default("admin@bryozoo.local"),
   ADMIN_SEED_PASSWORD: z.string().min(8).default("ChangeMe123!"),
+  GITHUB_TOKEN: z.string().min(1).optional(),
+  GITHUB_REPO_OWNER: z.string().min(1).optional(),
+  GITHUB_REPO_NAME: z.string().min(1).optional(),
+  GITHUB_REPO_BRANCH: z.string().min(1).default("main"),
+  CATALOG_SOURCE_PATH: z.string().min(1).default("data/ALL_Bryozoa.json"),
   NEXT_PUBLIC_MAP_TILE_URL: z
     .string()
     .default("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"),
@@ -20,6 +25,11 @@ export const env = serverEnvSchema.parse({
   AUTH_SECRET: process.env.AUTH_SECRET,
   ADMIN_SEED_EMAIL: process.env.ADMIN_SEED_EMAIL,
   ADMIN_SEED_PASSWORD: process.env.ADMIN_SEED_PASSWORD,
+  GITHUB_TOKEN: process.env.GITHUB_TOKEN,
+  GITHUB_REPO_OWNER: process.env.GITHUB_REPO_OWNER,
+  GITHUB_REPO_NAME: process.env.GITHUB_REPO_NAME,
+  GITHUB_REPO_BRANCH: process.env.GITHUB_REPO_BRANCH,
+  CATALOG_SOURCE_PATH: process.env.CATALOG_SOURCE_PATH,
   NEXT_PUBLIC_MAP_TILE_URL: process.env.NEXT_PUBLIC_MAP_TILE_URL,
   NEXT_PUBLIC_MAP_ATTRIBUTION: process.env.NEXT_PUBLIC_MAP_ATTRIBUTION,
 });

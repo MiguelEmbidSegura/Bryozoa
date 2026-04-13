@@ -1,13 +1,23 @@
-import { hash } from "bcryptjs";
-import { AuditAction, UserRole } from "@/generated/prisma/enums";
-import { prisma } from "@/lib/db";
-import { writeAuditLog } from "@/lib/audit";
+import { UserRole } from "@/generated/prisma/enums";
 import {
-  normalizeKeyPart,
-  normalizeUnknown,
-  prepareImportRow,
-} from "@/lib/import/normalizers";
+  buildCatalogSnapshot,
+  getCatalogSnapshot,
+  invalidateCatalogSnapshotCache,
+  writeCatalogSnapshot,
+} from "@/lib/catalog/snapshot";
+import {
+  createCatalogId,
+  createCatalogSourceHash,
+  isGitHubCatalogSyncEnabled,
+  readCatalogSourceState,
+  saveCatalogSourceState,
+  stripCatalogRowMetadata,
+  withCatalogRowMetadata,
+} from "@/lib/catalog/source";
+import type { CatalogSourceDocument, CatalogSourceRow } from "@/lib/catalog/types";
+import { prepareImportRow } from "@/lib/import/normalizers";
 import type { RecordFormValues, UserFormValues } from "@/lib/validators";
+import { env } from "@/lib/env";
 
 function recordFormToSourceRow(values: RecordFormValues) {
   return {
@@ -66,283 +76,182 @@ function recordFormToSourceRow(values: RecordFormValues) {
   };
 }
 
-async function ensureTaxonomy(prepared: ReturnType<typeof prepareImportRow>) {
-  if (!prepared.taxonomy) return null;
+function mergeHeaders(document: CatalogSourceDocument, row: Record<string, string>) {
+  const headerSet = new Set(document.headers ?? []);
 
-  const taxonomy = await prisma.taxonomy.upsert({
-    where: { normalizedKey: prepared.taxonomy.normalizedKey },
-    update: prepared.taxonomy,
-    create: prepared.taxonomy,
-    select: { id: true },
-  });
-
-  return taxonomy.id;
-}
-
-async function ensureLocation(prepared: ReturnType<typeof prepareImportRow>) {
-  if (!prepared.location) return null;
-
-  const location = await prisma.location.upsert({
-    where: { normalizedKey: prepared.location.normalizedKey },
-    update: prepared.location,
-    create: prepared.location,
-    select: { id: true },
-  });
-
-  return location.id;
-}
-
-async function ensurePerson(rawName: string | null) {
-  const normalizedName = normalizeKeyPart(normalizeUnknown(rawName));
-  if (!normalizedName || !rawName) return null;
-
-  const person = await prisma.person.upsert({
-    where: { normalizedName },
-    update: { name: rawName },
-    create: { name: rawName, normalizedName },
-    select: { id: true },
-  });
-
-  return person.id;
-}
-
-export async function saveSpecimenRecord(values: RecordFormValues, actorUserId: string) {
-  const prepared = prepareImportRow(recordFormToSourceRow(values), 0);
-  const taxonomyId = await ensureTaxonomy(prepared);
-  const locationId = await ensureLocation(prepared);
-  const collectorPersonId = await ensurePerson(prepared.collectorName);
-  const identifierPersonId = await ensurePerson(prepared.identifierName);
-
-  if (values.id) {
-    const conflictingRecord = await prisma.specimenRecord.findFirst({
-      where: {
-        importKey: prepared.importKey,
-        id: { not: values.id },
-      },
-      select: { id: true },
-    });
-
-    if (conflictingRecord) {
-      throw new Error("Another record already uses the same deduplication key.");
-    }
-
-    const updated = await prisma.specimenRecord.update({
-      where: { id: values.id },
-      data: {
-        importKey: prepared.importKey,
-        importKeySource: prepared.importKeySource,
-        taxonomyId,
-        locationId,
-        collectorPersonId,
-        identifierPersonId,
-        archivedAt: values.archived ? new Date() : null,
-        ...prepared.record,
-      },
-      select: { id: true },
-    });
-
-    await prisma.imageAsset.deleteMany({ where: { specimenRecordId: updated.id } });
-    await prisma.bibliographicReference.deleteMany({ where: { specimenRecordId: updated.id } });
-
-    if (prepared.images.length > 0) {
-      await prisma.imageAsset.createMany({
-        data: prepared.images.map((image) => ({
-          specimenRecordId: updated.id,
-          position: image.position,
-          originalValue: image.originalValue,
-          url: image.url,
-          fileName: image.fileName,
-          isUrl: image.isUrl,
-          author: image.author,
-        })),
-      });
-    }
-
-    if (prepared.references.length > 0) {
-      await prisma.bibliographicReference.createMany({
-        data: prepared.references.map((reference) => ({
-          specimenRecordId: updated.id,
-          position: reference.position,
-          citation: reference.citation,
-          normalizedCitation: reference.normalizedCitation,
-        })),
-      });
-    }
-
-    await writeAuditLog({
-      userId: actorUserId,
-      specimenRecordId: updated.id,
-      action: AuditAction.UPDATE,
-      entityType: "SpecimenRecord",
-      entityId: updated.id,
-      metadata: { importKey: prepared.importKey },
-    });
-
-    return updated.id;
+  for (const key of Object.keys(row)) {
+    headerSet.add(key);
   }
 
-  const created = await prisma.specimenRecord.create({
-    data: {
-      importKey: prepared.importKey,
-      importKeySource: prepared.importKeySource,
-      taxonomyId,
-      locationId,
-      collectorPersonId,
-      identifierPersonId,
-      archivedAt: values.archived ? new Date() : null,
-      ...prepared.record,
-      images: {
-        create: prepared.images.map((image) => ({
-          position: image.position,
-          originalValue: image.originalValue,
-          url: image.url,
-          fileName: image.fileName,
-          isUrl: image.isUrl,
-          author: image.author,
-        })),
-      },
-      references: {
-        create: prepared.references.map((reference) => ({
-          position: reference.position,
-          citation: reference.citation,
-          normalizedCitation: reference.normalizedCitation,
-        })),
-      },
-    },
-    select: { id: true },
-  });
-
-  await writeAuditLog({
-    userId: actorUserId,
-    specimenRecordId: created.id,
-    action: AuditAction.CREATE,
-    entityType: "SpecimenRecord",
-    entityId: created.id,
-    metadata: { importKey: prepared.importKey },
-  });
-
-  return created.id;
+  return Array.from(headerSet);
 }
 
-export async function setRecordArchived(recordId: string, archived: boolean, actorUserId: string) {
-  await prisma.specimenRecord.update({
-    where: { id: recordId },
-    data: { archivedAt: archived ? new Date() : null },
-  });
-
-  await writeAuditLog({
-    userId: actorUserId,
-    specimenRecordId: recordId,
-    action: AuditAction.ARCHIVE,
-    entityType: "SpecimenRecord",
-    entityId: recordId,
-    metadata: { archived },
-  });
+function finalizeDocument(document: CatalogSourceDocument) {
+  return {
+    ...document,
+    format: "bryozoo-import-json-v2",
+    headers: document.headers ?? [],
+    totalRows: document.rows.length,
+    sourceHash: createCatalogSourceHash(document),
+  } satisfies CatalogSourceDocument;
 }
 
-export async function deleteRecord(recordId: string, actorUserId: string) {
-  await prisma.specimenRecord.delete({ where: { id: recordId } });
+function findRowIndexById(rows: CatalogSourceRow[], id: string) {
+  return rows.findIndex((row) => row.__catalogId === id);
+}
 
-  await writeAuditLog({
-    userId: actorUserId,
-    action: AuditAction.DELETE,
-    entityType: "SpecimenRecord",
-    entityId: recordId,
+function buildCommitPrefix() {
+  return isGitHubCatalogSyncEnabled() ? "catalog(github)" : "catalog(local)";
+}
+
+async function refreshLocalSnapshotIfPossible() {
+  if (isGitHubCatalogSyncEnabled()) {
+    return;
+  }
+
+  invalidateCatalogSnapshotCache();
+  const snapshot = await buildCatalogSnapshot();
+  await writeCatalogSnapshot(snapshot);
+  invalidateCatalogSnapshotCache();
+}
+
+export async function saveSpecimenRecord(values: RecordFormValues, _actorUserId: string) {
+  void _actorUserId;
+  const state = await readCatalogSourceState({ preferRemote: isGitHubCatalogSyncEnabled() });
+  const sourceRow = recordFormToSourceRow(values);
+  const prepared = prepareImportRow(sourceRow, 0);
+  const now = new Date().toISOString();
+  const existingIndex = values.id ? findRowIndexById(state.document.rows, values.id) : -1;
+  const catalogId = values.id ?? createCatalogId(prepared.importKey);
+
+  const conflictingIndex = state.document.rows.findIndex((row, index) => {
+    if (index === existingIndex) return false;
+    return prepareImportRow(stripCatalogRowMetadata(row), index + 2).importKey === prepared.importKey;
   });
+
+  if (conflictingIndex >= 0) {
+    throw new Error("Another record already uses the same deduplication key.");
+  }
+
+  const existingRow = existingIndex >= 0 ? state.document.rows[existingIndex] : null;
+  const nextRow = withCatalogRowMetadata(sourceRow, {
+    id: catalogId,
+    archived: values.archived,
+    createdAt: existingRow?.__createdAt ?? now,
+    updatedAt: now,
+  });
+
+  const nextRows = [...state.document.rows];
+
+  if (existingIndex >= 0) {
+    nextRows[existingIndex] = nextRow;
+  } else {
+    nextRows.push(nextRow);
+  }
+
+  const nextDocument = finalizeDocument({
+    ...state.document,
+    headers: mergeHeaders(state.document, sourceRow),
+    rows: nextRows,
+  });
+
+  await saveCatalogSourceState(
+    state,
+    nextDocument,
+    `${buildCommitPrefix()}: ${existingIndex >= 0 ? "update" : "create"} ${catalogId}`,
+  );
+  await refreshLocalSnapshotIfPossible();
+
+  return {
+    id: catalogId,
+    deploymentPending: isGitHubCatalogSyncEnabled(),
+  };
+}
+
+export async function setRecordArchived(recordId: string, archived: boolean, _actorUserId: string) {
+  void _actorUserId;
+  const state = await readCatalogSourceState({ preferRemote: isGitHubCatalogSyncEnabled() });
+  const index = findRowIndexById(state.document.rows, recordId);
+
+  if (index < 0) {
+    throw new Error("Record not found.");
+  }
+
+  const current = state.document.rows[index];
+  const nextRows = [...state.document.rows];
+  nextRows[index] = {
+    ...current,
+    __archived: archived ? "true" : "false",
+    __updatedAt: new Date().toISOString(),
+  };
+
+  const nextDocument = finalizeDocument({
+    ...state.document,
+    rows: nextRows,
+  });
+
+  await saveCatalogSourceState(
+    state,
+    nextDocument,
+    `${buildCommitPrefix()}: ${archived ? "archive" : "restore"} ${recordId}`,
+  );
+  await refreshLocalSnapshotIfPossible();
+}
+
+export async function deleteRecord(recordId: string, _actorUserId: string) {
+  void _actorUserId;
+  const state = await readCatalogSourceState({ preferRemote: isGitHubCatalogSyncEnabled() });
+  const nextRows = state.document.rows.filter((row) => row.__catalogId !== recordId);
+
+  if (nextRows.length === state.document.rows.length) {
+    throw new Error("Record not found.");
+  }
+
+  const nextDocument = finalizeDocument({
+    ...state.document,
+    rows: nextRows,
+  });
+
+  await saveCatalogSourceState(state, nextDocument, `${buildCommitPrefix()}: delete ${recordId}`);
+  await refreshLocalSnapshotIfPossible();
 }
 
 export async function getAdminDashboardData() {
-  const recordCount = await prisma.specimenRecord.count({ where: { archivedAt: null } });
-  const archivedCount = await prisma.specimenRecord.count({
-    where: { archivedAt: { not: null } },
-  });
-  const importCount = await prisma.importBatch.count();
-  const userCount = await prisma.user.count();
-  const recentIssues = await prisma.importIssue.count({ where: { severity: "ERROR" } });
+  const snapshot = await getCatalogSnapshot();
+  const activeRecords = snapshot.records.filter((record) => !record.archivedAt);
+  const archivedRecords = snapshot.records.filter((record) => Boolean(record.archivedAt));
 
-  return { recordCount, archivedCount, importCount, userCount, recentIssues };
+  return {
+    recordCount: activeRecords.length,
+    archivedCount: archivedRecords.length,
+    importCount: 0,
+    userCount: 1,
+    recentIssues: 0,
+  };
 }
 
 export async function getImportHistory() {
-  return prisma.importBatch.findMany({
-    orderBy: { startedAt: "desc" },
-    include: {
-      issues: {
-        orderBy: [{ severity: "desc" }, { rowNumber: "asc" }],
-        take: 8,
-      },
-    },
-    take: 20,
-  });
+  return [];
 }
 
 export async function getAuditHistory() {
-  return prisma.auditLog.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      user: { select: { name: true, email: true } },
-      specimenRecord: { select: { register: true } },
-      batch: { select: { sourceFile: true } },
-    },
-    take: 100,
-  });
+  return [];
 }
 
 export async function getAdminUsers() {
-  return prisma.user.findMany({
-    orderBy: [{ role: "asc" }, { name: "asc" }],
-  });
+  return [
+    {
+      id: "env-admin",
+      name: "BryoZoo Admin",
+      email: env.ADMIN_SEED_EMAIL,
+      role: UserRole.ADMIN,
+      isActive: true,
+    },
+  ];
 }
 
-export async function saveAdminUser(values: UserFormValues, actorUserId: string) {
-  const passwordHash = values.password ? await hash(values.password, 12) : undefined;
-
-  if (values.id) {
-    const updated = await prisma.user.update({
-      where: { id: values.id },
-      data: {
-        name: values.name,
-        email: values.email.toLowerCase().trim(),
-        role: values.role as UserRole,
-        isActive: values.isActive,
-        ...(passwordHash ? { passwordHash } : {}),
-      },
-      select: { id: true },
-    });
-
-    await writeAuditLog({
-      userId: actorUserId,
-      action: AuditAction.UPDATE,
-      entityType: "User",
-      entityId: updated.id,
-      metadata: { managedUserEmail: values.email },
-    });
-
-    return updated.id;
-  }
-
-  if (!passwordHash) {
-    throw new Error("Password is required when creating a new user.");
-  }
-
-  const created = await prisma.user.create({
-    data: {
-      name: values.name,
-      email: values.email.toLowerCase().trim(),
-      role: values.role as UserRole,
-      isActive: values.isActive,
-      passwordHash,
-    },
-    select: { id: true },
-  });
-
-  await writeAuditLog({
-    userId: actorUserId,
-    action: AuditAction.CREATE,
-    entityType: "User",
-    entityId: created.id,
-    metadata: { managedUserEmail: values.email },
-  });
-
-  return created.id;
+export async function saveAdminUser(_values: UserFormValues, _actorUserId: string) {
+  void _values;
+  void _actorUserId;
+  throw new Error("User management is disabled in GitHub catalog mode.");
 }

@@ -147,8 +147,12 @@ export function RecordForm({ defaultValues }: { defaultValues?: Partial<RecordFo
                 })),
             };
             const result = await saveRecordAction(normalizedValues);
-            toast.success("Record saved");
-            router.push(`/admin/records/${result.id}`);
+            toast.success(
+              result.deploymentPending
+                ? "Record committed to GitHub. Vercel will publish it after the automatic deploy finishes."
+                : "Record saved",
+            );
+            router.push(result.deploymentPending ? "/admin/records" : `/admin/records/${result.id}`);
           } catch (error) {
             toast.error(error instanceof Error ? error.message : "Could not save record");
           }

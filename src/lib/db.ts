@@ -9,7 +9,18 @@ const globalForPrisma = globalThis as typeof globalThis & {
 
 function createPrismaClient() {
   // Keep provider-specific connection params such as sslmode=require.
-  const connectionString = process.env.DATABASE_URL;
+  const connectionString = process.env.DATABASE_URL?.trim();
+
+  if (!connectionString) {
+    return new Proxy(
+      {},
+      {
+        get() {
+          throw new Error("DATABASE_URL is not configured.");
+        },
+      },
+    ) as PrismaClient;
+  }
 
   const pool =
     globalForPrisma.pgPool ??

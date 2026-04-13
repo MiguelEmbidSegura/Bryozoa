@@ -1,77 +1,55 @@
-import { Prisma } from "@/generated/prisma/client";
-import { prisma } from "@/lib/db";
 import { MAP_PAGE_SIZE } from "@/lib/constants";
+import { getCatalogSnapshot } from "@/lib/catalog/snapshot";
+import type { CatalogRecord } from "@/lib/catalog/types";
 import type { ExplorerFilters } from "@/lib/validators";
 
-type FacetRow = { value: string; count: number };
-
-function buildWhere(filters: ExplorerFilters): Prisma.SpecimenRecordWhereInput {
-  const and: Prisma.SpecimenRecordWhereInput[] = [{ archivedAt: null }];
-
-  if (filters.search) {
-    and.push({
-      searchText: {
-        contains: filters.search,
-        mode: "insensitive",
-      },
-    });
-  }
-
-  if (filters.taxClass) and.push({ taxonomy: { is: { taxClass: filters.taxClass } } });
-  if (filters.taxOrder) and.push({ taxonomy: { is: { taxOrder: filters.taxOrder } } });
-  if (filters.family) and.push({ taxonomy: { is: { family: filters.family } } });
-  if (filters.taxon) and.push({ taxonomy: { is: { taxon: filters.taxon } } });
-  if (filters.typeStatus) and.push({ typeStatus: filters.typeStatus });
-  if (filters.siteName) and.push({ location: { is: { siteName: filters.siteName } } });
-  if (filters.country) and.push({ location: { is: { country: filters.country } } });
-  if (filters.region) and.push({ location: { is: { region: filters.region } } });
-  if (filters.waterBody) and.push({ location: { is: { waterBody: filters.waterBody } } });
-  if (filters.oceanSea) and.push({ location: { is: { oceanSea: filters.oceanSea } } });
-  if (filters.collector) and.push({ collectorPerson: { is: { name: filters.collector } } });
-  if (filters.identifiedBy) {
-    and.push({ identifierPerson: { is: { name: filters.identifiedBy } } });
-  }
-  if (filters.yearFrom) and.push({ parsedYear: { gte: filters.yearFrom } });
-  if (filters.yearTo) and.push({ parsedYear: { lte: filters.yearTo } });
-  if (filters.hasImages) and.push({ images: { some: {} } });
-  if (filters.hasCoordinates) {
-    and.push({ location: { is: { hasValidCoordinates: true } } });
-  }
-
-  if (
-    filters.minLat !== undefined &&
-    filters.maxLat !== undefined &&
-    filters.minLng !== undefined &&
-    filters.maxLng !== undefined
-  ) {
-    and.push({
-      location: {
-        is: {
-          hasValidCoordinates: true,
-          latitude: { gte: filters.minLat, lte: filters.maxLat },
-          longitude: { gte: filters.minLng, lte: filters.maxLng },
-        },
-      },
-    });
-  }
-
-  return { AND: and };
+function hasTextMatch(haystack: string | null | undefined, needle: string | undefined) {
+  if (!needle) return true;
+  return (haystack ?? "").toLowerCase().includes(needle.toLowerCase());
 }
 
-function buildOrderBy(sort: ExplorerFilters["sort"]): Prisma.SpecimenRecordOrderByWithRelationInput[] {
-  switch (sort) {
-    case "taxon":
-      return [{ taxonomy: { taxon: "asc" } }, { register: "asc" }];
-    case "country":
-      return [{ location: { country: "asc" } }, { register: "asc" }];
-    case "date":
-      return [{ parsedYear: "desc" }, { parsedMonth: "desc" }, { parsedDay: "desc" }];
-    case "type":
-      return [{ typeStatus: "asc" }, { register: "asc" }];
-    case "register":
-    default:
-      return [{ register: "asc" }, { taxonomy: { taxon: "asc" } }];
+function isTruthy(value: string | null | undefined) {
+  return Boolean(value && value.trim().length > 0);
+}
+
+function toFacetRows(values: Array<string | null | undefined>, limit: number) {
+  const counts = new Map<string, number>();
+
+  for (const value of values) {
+    if (!isTruthy(value)) continue;
+    counts.set(value!, (counts.get(value!) ?? 0) + 1);
   }
+
+  return Array.from(counts.entries())
+    .map(([value, count]) => ({ value, count }))
+    .sort((left, right) => right.count - left.count || left.value.localeCompare(right.value))
+    .slice(0, limit);
+}
+
+function sortRecords(records: CatalogRecord[], sort: ExplorerFilters["sort"]) {
+  return [...records].sort((left, right) => {
+    switch (sort) {
+      case "taxon":
+        return (left.taxonomy?.taxon ?? "").localeCompare(right.taxonomy?.taxon ?? "") ||
+          (left.register ?? "").localeCompare(right.register ?? "");
+      case "country":
+        return (left.location?.country ?? "").localeCompare(right.location?.country ?? "") ||
+          (left.register ?? "").localeCompare(right.register ?? "");
+      case "date":
+        return (
+          (right.parsedYear ?? -Infinity) - (left.parsedYear ?? -Infinity) ||
+          (right.parsedMonth ?? -Infinity) - (left.parsedMonth ?? -Infinity) ||
+          (right.parsedDay ?? -Infinity) - (left.parsedDay ?? -Infinity)
+        );
+      case "type":
+        return (left.typeStatus ?? "").localeCompare(right.typeStatus ?? "") ||
+          (left.register ?? "").localeCompare(right.register ?? "");
+      case "register":
+      default:
+        return (left.register ?? "").localeCompare(right.register ?? "") ||
+          (left.taxonomy?.taxon ?? "").localeCompare(right.taxonomy?.taxon ?? "");
+    }
+  });
 }
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
@@ -86,245 +64,163 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
   return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-async function getFacetValues(query: Prisma.Sql) {
-  return prisma.$queryRaw<FacetRow[]>(query);
+async function getAllRecords() {
+  const snapshot = await getCatalogSnapshot();
+  return snapshot.records;
+}
+
+async function getActiveRecords() {
+  const records = await getAllRecords();
+  return records.filter((record) => !record.archivedAt);
+}
+
+function matchesFilters(record: CatalogRecord, filters: ExplorerFilters) {
+  if (filters.search && !hasTextMatch(record.searchText, filters.search)) return false;
+  if (filters.taxClass && record.taxonomy?.taxClass !== filters.taxClass) return false;
+  if (filters.taxOrder && record.taxonomy?.taxOrder !== filters.taxOrder) return false;
+  if (filters.family && record.taxonomy?.family !== filters.family) return false;
+  if (filters.taxon && record.taxonomy?.taxon !== filters.taxon) return false;
+  if (filters.typeStatus && record.typeStatus !== filters.typeStatus) return false;
+  if (filters.siteName && record.location?.siteName !== filters.siteName) return false;
+  if (filters.country && record.location?.country !== filters.country) return false;
+  if (filters.region && record.location?.region !== filters.region) return false;
+  if (filters.waterBody && record.location?.waterBody !== filters.waterBody) return false;
+  if (filters.oceanSea && record.location?.oceanSea !== filters.oceanSea) return false;
+  if (filters.collector && record.collectorPerson?.name !== filters.collector) return false;
+  if (filters.identifiedBy && record.identifierPerson?.name !== filters.identifiedBy) return false;
+  if (filters.yearFrom && (record.parsedYear === null || record.parsedYear < filters.yearFrom)) {
+    return false;
+  }
+  if (filters.yearTo && (record.parsedYear === null || record.parsedYear > filters.yearTo)) {
+    return false;
+  }
+  if (filters.hasImages && record.images.length === 0) return false;
+  if (filters.hasCoordinates && !record.location?.hasValidCoordinates) return false;
+
+  if (
+    filters.minLat !== undefined &&
+    filters.maxLat !== undefined &&
+    filters.minLng !== undefined &&
+    filters.maxLng !== undefined
+  ) {
+    const latitude = record.location?.latitude;
+    const longitude = record.location?.longitude;
+
+    if (
+      latitude === null ||
+      latitude === undefined ||
+      longitude === null ||
+      longitude === undefined ||
+      latitude < filters.minLat ||
+      latitude > filters.maxLat ||
+      longitude < filters.minLng ||
+      longitude > filters.maxLng
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 export async function getHomeData() {
-  const totalRecords = await prisma.specimenRecord.count({ where: { archivedAt: null } });
-  const withImages = await prisma.specimenRecord.count({
-    where: { archivedAt: null, images: { some: {} } },
-  });
-  const withCoordinates = await prisma.specimenRecord.count({
-    where: { archivedAt: null, location: { is: { hasValidCoordinates: true } } },
-  });
-  const countries = await prisma.$queryRaw<Array<{ count: number }>>(Prisma.sql`
-    SELECT CAST(COUNT(DISTINCT l."country") AS INTEGER) AS count
-    FROM "specimen_records" r
-    LEFT JOIN "locations" l ON l.id = r."locationId"
-    WHERE r."archivedAt" IS NULL AND l."country" IS NOT NULL
-  `);
-  const taxa = await prisma.$queryRaw<Array<{ count: number }>>(Prisma.sql`
-    SELECT CAST(COUNT(DISTINCT t."taxon") AS INTEGER) AS count
-    FROM "specimen_records" r
-    LEFT JOIN "taxonomies" t ON t.id = r."taxonomyId"
-    WHERE r."archivedAt" IS NULL AND t."taxon" IS NOT NULL
-  `);
-  const classes = await getFacetValues(Prisma.sql`
-    SELECT t."taxClass" AS value, CAST(COUNT(*) AS INTEGER) AS count
-    FROM "specimen_records" r
-    JOIN "taxonomies" t ON t.id = r."taxonomyId"
-    WHERE r."archivedAt" IS NULL AND t."taxClass" IS NOT NULL
-    GROUP BY t."taxClass"
-    ORDER BY count DESC, value ASC
-    LIMIT 8
-  `);
-  const orders = await getFacetValues(Prisma.sql`
-    SELECT t."taxOrder" AS value, CAST(COUNT(*) AS INTEGER) AS count
-    FROM "specimen_records" r
-    JOIN "taxonomies" t ON t.id = r."taxonomyId"
-    WHERE r."archivedAt" IS NULL AND t."taxOrder" IS NOT NULL
-    GROUP BY t."taxOrder"
-    ORDER BY count DESC, value ASC
-    LIMIT 8
-  `);
-  const families = await getFacetValues(Prisma.sql`
-    SELECT t."family" AS value, CAST(COUNT(*) AS INTEGER) AS count
-    FROM "specimen_records" r
-    JOIN "taxonomies" t ON t.id = r."taxonomyId"
-    WHERE r."archivedAt" IS NULL AND t."family" IS NOT NULL
-    GROUP BY t."family"
-    ORDER BY count DESC, value ASC
-    LIMIT 8
-  `);
-
-  const topCountries = await getFacetValues(Prisma.sql`
-    SELECT l."country" AS value, CAST(COUNT(*) AS INTEGER) AS count
-    FROM "specimen_records" r
-    JOIN "locations" l ON l.id = r."locationId"
-    WHERE r."archivedAt" IS NULL AND l."country" IS NOT NULL
-    GROUP BY l."country"
-    ORDER BY count DESC, value ASC
-    LIMIT 8
-  `);
+  const records = await getActiveRecords();
 
   return {
     stats: {
-      totalRecords,
-      withImages,
-      withCoordinates,
-      countryCount: countries[0]?.count ?? 0,
-      taxonCount: taxa[0]?.count ?? 0,
+      totalRecords: records.length,
+      withImages: records.filter((record) => record.images.length > 0).length,
+      withCoordinates: records.filter((record) => record.location?.hasValidCoordinates).length,
+      countryCount: new Set(records.map((record) => record.location?.country).filter(isTruthy)).size,
+      taxonCount: new Set(records.map((record) => record.taxonomy?.taxon).filter(isTruthy)).size,
     },
     facets: {
-      classes,
-      orders,
-      families,
-      countries: topCountries,
+      classes: toFacetRows(records.map((record) => record.taxonomy?.taxClass), 8),
+      orders: toFacetRows(records.map((record) => record.taxonomy?.taxOrder), 8),
+      families: toFacetRows(records.map((record) => record.taxonomy?.family), 8),
+      countries: toFacetRows(records.map((record) => record.location?.country), 8),
     },
   };
 }
 
-export async function getExplorerFacets() {
-  const classes = await getFacetValues(Prisma.sql`
-    SELECT t."taxClass" AS value, CAST(COUNT(*) AS INTEGER) AS count
-    FROM "specimen_records" r JOIN "taxonomies" t ON t.id = r."taxonomyId"
-    WHERE r."archivedAt" IS NULL AND t."taxClass" IS NOT NULL
-    GROUP BY t."taxClass" ORDER BY count DESC, value ASC LIMIT 50
-  `);
-  const orders = await getFacetValues(Prisma.sql`
-    SELECT t."taxOrder" AS value, CAST(COUNT(*) AS INTEGER) AS count
-    FROM "specimen_records" r JOIN "taxonomies" t ON t.id = r."taxonomyId"
-    WHERE r."archivedAt" IS NULL AND t."taxOrder" IS NOT NULL
-    GROUP BY t."taxOrder" ORDER BY count DESC, value ASC LIMIT 50
-  `);
-  const families = await getFacetValues(Prisma.sql`
-    SELECT t."family" AS value, CAST(COUNT(*) AS INTEGER) AS count
-    FROM "specimen_records" r JOIN "taxonomies" t ON t.id = r."taxonomyId"
-    WHERE r."archivedAt" IS NULL AND t."family" IS NOT NULL
-    GROUP BY t."family" ORDER BY count DESC, value ASC LIMIT 50
-  `);
-  const types = await getFacetValues(Prisma.sql`
-    SELECT r."typeStatus" AS value, CAST(COUNT(*) AS INTEGER) AS count
-    FROM "specimen_records" r
-    WHERE r."archivedAt" IS NULL AND r."typeStatus" IS NOT NULL
-    GROUP BY r."typeStatus" ORDER BY count DESC, value ASC LIMIT 50
-  `);
-  const countries = await getFacetValues(Prisma.sql`
-    SELECT l."country" AS value, CAST(COUNT(*) AS INTEGER) AS count
-    FROM "specimen_records" r JOIN "locations" l ON l.id = r."locationId"
-    WHERE r."archivedAt" IS NULL AND l."country" IS NOT NULL
-    GROUP BY l."country" ORDER BY count DESC, value ASC LIMIT 50
-  `);
-  const regions = await getFacetValues(Prisma.sql`
-    SELECT l."region" AS value, CAST(COUNT(*) AS INTEGER) AS count
-    FROM "specimen_records" r JOIN "locations" l ON l.id = r."locationId"
-    WHERE r."archivedAt" IS NULL AND l."region" IS NOT NULL
-    GROUP BY l."region" ORDER BY count DESC, value ASC LIMIT 50
-  `);
-  const waterBodies = await getFacetValues(Prisma.sql`
-    SELECT l."waterBody" AS value, CAST(COUNT(*) AS INTEGER) AS count
-    FROM "specimen_records" r JOIN "locations" l ON l.id = r."locationId"
-    WHERE r."archivedAt" IS NULL AND l."waterBody" IS NOT NULL
-    GROUP BY l."waterBody" ORDER BY count DESC, value ASC LIMIT 50
-  `);
-  const seas = await getFacetValues(Prisma.sql`
-    SELECT l."oceanSea" AS value, CAST(COUNT(*) AS INTEGER) AS count
-    FROM "specimen_records" r JOIN "locations" l ON l.id = r."locationId"
-    WHERE r."archivedAt" IS NULL AND l."oceanSea" IS NOT NULL
-    GROUP BY l."oceanSea" ORDER BY count DESC, value ASC LIMIT 50
-  `);
-  const collectors = await getFacetValues(Prisma.sql`
-    SELECT p."name" AS value, CAST(COUNT(*) AS INTEGER) AS count
-    FROM "specimen_records" r JOIN "persons" p ON p.id = r."collectorPersonId"
-    WHERE r."archivedAt" IS NULL AND p."name" IS NOT NULL
-    GROUP BY p."name" ORDER BY count DESC, value ASC LIMIT 50
-  `);
+export async function getHomeHighlights() {
+  const records = await getActiveRecords();
+  return records
+    .filter((record) => record.images.length > 0)
+    .sort((left, right) => (right.parsedYear ?? -Infinity) - (left.parsedYear ?? -Infinity))
+    .slice(0, 3);
+}
 
-  return { classes, orders, families, types, countries, regions, waterBodies, seas, collectors };
+export async function getHomeMapPreview() {
+  const records = await getActiveRecords();
+  return records
+    .filter((record) => record.location?.hasValidCoordinates)
+    .sort(
+      (left, right) =>
+        (right.parsedYear ?? -Infinity) - (left.parsedYear ?? -Infinity) ||
+        (left.register ?? "").localeCompare(right.register ?? ""),
+    )
+    .slice(0, 180)
+    .map((record) => ({
+      id: record.id,
+      latitude: record.location!.latitude!,
+      longitude: record.location!.longitude!,
+      title: record.taxonomy?.taxon ?? record.register ?? "Unknown",
+      subtitle: [record.location?.country, record.location?.siteName].filter(Boolean).join(" - "),
+    }));
+}
+
+export async function getExplorerFacets() {
+  const records = await getActiveRecords();
+
+  return {
+    classes: toFacetRows(records.map((record) => record.taxonomy?.taxClass), 50),
+    orders: toFacetRows(records.map((record) => record.taxonomy?.taxOrder), 50),
+    families: toFacetRows(records.map((record) => record.taxonomy?.family), 50),
+    types: toFacetRows(records.map((record) => record.typeStatus), 50),
+    countries: toFacetRows(records.map((record) => record.location?.country), 50),
+    regions: toFacetRows(records.map((record) => record.location?.region), 50),
+    waterBodies: toFacetRows(records.map((record) => record.location?.waterBody), 50),
+    seas: toFacetRows(records.map((record) => record.location?.oceanSea), 50),
+    collectors: toFacetRows(records.map((record) => record.collectorPerson?.name), 50),
+  };
 }
 
 export async function getExplorerData(filters: ExplorerFilters) {
-  const where = buildWhere(filters);
+  const records = await getActiveRecords();
+  const filtered = sortRecords(records.filter((record) => matchesFilters(record, filters)), filters.sort);
   const skip = (filters.page - 1) * filters.pageSize;
-
-  const total = await prisma.specimenRecord.count({ where });
-  const items = await prisma.specimenRecord.findMany({
-    where,
-    skip,
-    take: filters.pageSize,
-    orderBy: buildOrderBy(filters.sort),
-    select: {
-      id: true,
-      register: true,
-      oid: true,
-      typeStatus: true,
-      parsedYear: true,
-      notes: true,
-      taxonomy: {
-        select: {
-          taxClass: true,
-          taxOrder: true,
-          family: true,
-          taxon: true,
-          taxonAuthor: true,
-        },
-      },
-      location: {
-        select: {
-          siteName: true,
-          country: true,
-          region: true,
-          waterBody: true,
-          oceanSea: true,
-          hasValidCoordinates: true,
-        },
-      },
-      collectorPerson: { select: { name: true } },
-      identifierPerson: { select: { name: true } },
-      images: {
-        take: 1,
-        orderBy: { position: "asc" },
-        select: { originalValue: true, url: true, fileName: true, isUrl: true },
-      },
-      _count: {
-        select: {
-          images: true,
-          references: true,
-        },
-      },
-    },
-  });
+  const items = filtered.slice(skip, skip + filters.pageSize);
 
   return {
     items,
-    total,
+    total: filtered.length,
     page: filters.page,
     pageSize: filters.pageSize,
-    pageCount: Math.max(1, Math.ceil(total / filters.pageSize)),
+    pageCount: Math.max(1, Math.ceil(filtered.length / filters.pageSize)),
   };
 }
 
 export async function getMapData(filters: ExplorerFilters) {
-  const where = buildWhere({ ...filters, hasCoordinates: true, pageSize: MAP_PAGE_SIZE });
-  const rows = await prisma.specimenRecord.findMany({
-    where,
-    take: MAP_PAGE_SIZE,
-    orderBy: buildOrderBy(filters.sort),
-    select: {
-      id: true,
-      register: true,
-      typeStatus: true,
-      taxonomy: { select: { taxon: true, family: true } },
-      location: {
-        select: {
-          siteName: true,
-          country: true,
-          region: true,
-          latitude: true,
-          longitude: true,
-          hasValidCoordinates: true,
-        },
-      },
-      images: {
-        take: 1,
-        orderBy: { position: "asc" },
-        select: { originalValue: true, url: true, fileName: true, isUrl: true },
-      },
-    },
-  });
+  const records = await getActiveRecords();
+  const filtered = sortRecords(
+    records.filter(
+      (record) => matchesFilters(record, { ...filters, hasCoordinates: true, pageSize: MAP_PAGE_SIZE }),
+    ),
+    filters.sort,
+  ).slice(0, MAP_PAGE_SIZE);
 
   if (
     filters.radiusLat === undefined ||
     filters.radiusLng === undefined ||
     filters.radiusKm === undefined
   ) {
-    return rows;
+    return filtered;
   }
 
-  return rows.filter((row) => {
-    const latitude = row.location?.latitude;
-    const longitude = row.location?.longitude;
+  return filtered.filter((record) => {
+    const latitude = record.location?.latitude;
+    const longitude = record.location?.longitude;
 
     if (latitude === null || latitude === undefined || longitude === null || longitude === undefined) {
       return false;
@@ -335,118 +231,58 @@ export async function getMapData(filters: ExplorerFilters) {
 }
 
 export async function getRecordDetail(id: string) {
-  const record = await prisma.specimenRecord.findUnique({
-    where: { id },
-    include: {
-      taxonomy: true,
-      location: true,
-      collectorPerson: true,
-      identifierPerson: true,
-      images: { orderBy: { position: "asc" } },
-      references: { orderBy: { position: "asc" } },
-      importBatch: true,
-    },
-  });
+  const records = await getActiveRecords();
+  const record = records.find((entry) => entry.id === id) ?? null;
 
-  if (!record || record.archivedAt) {
+  if (!record) {
     return null;
   }
 
   const relatedByTaxon = record.taxonomy?.taxon
-    ? await prisma.specimenRecord.findMany({
-        where: {
-          id: { not: record.id },
-          archivedAt: null,
-          taxonomy: { is: { taxon: record.taxonomy.taxon } },
-        },
-        take: 6,
-        orderBy: [{ register: "asc" }],
-        select: {
-          id: true,
-          register: true,
-          taxonomy: { select: { taxon: true } },
-          location: { select: { country: true } },
-        },
-      })
+    ? records
+        .filter((entry) => entry.id !== record.id && entry.taxonomy?.taxon === record.taxonomy?.taxon)
+        .slice(0, 6)
     : [];
   const relatedByFamily = record.taxonomy?.family
-    ? await prisma.specimenRecord.findMany({
-        where: {
-          id: { not: record.id },
-          archivedAt: null,
-          taxonomy: { is: { family: record.taxonomy.family } },
-        },
-        take: 6,
-        orderBy: [{ register: "asc" }],
-        select: {
-          id: true,
-          register: true,
-          taxonomy: { select: { taxon: true, family: true } },
-          location: { select: { country: true } },
-        },
-      })
+    ? records
+        .filter((entry) => entry.id !== record.id && entry.taxonomy?.family === record.taxonomy?.family)
+        .slice(0, 6)
     : [];
   const relatedByCountry = record.location?.country
-    ? await prisma.specimenRecord.findMany({
-        where: {
-          id: { not: record.id },
-          archivedAt: null,
-          location: { is: { country: record.location.country } },
-        },
-        take: 6,
-        orderBy: [{ register: "asc" }],
-        select: {
-          id: true,
-          register: true,
-          taxonomy: { select: { taxon: true } },
-          location: { select: { country: true } },
-        },
-      })
+    ? records
+        .filter((entry) => entry.id !== record.id && entry.location?.country === record.location?.country)
+        .slice(0, 6)
     : [];
   const relatedByCollector = record.collectorPerson?.name
-    ? await prisma.specimenRecord.findMany({
-        where: {
-          id: { not: record.id },
-          archivedAt: null,
-          collectorPerson: { is: { name: record.collectorPerson.name } },
-        },
-        take: 6,
-        orderBy: [{ register: "asc" }],
-        select: {
-          id: true,
-          register: true,
-          taxonomy: { select: { taxon: true } },
-          collectorPerson: { select: { name: true } },
-        },
-      })
+    ? records
+        .filter(
+          (entry) => entry.id !== record.id && entry.collectorPerson?.name === record.collectorPerson?.name,
+        )
+        .slice(0, 6)
     : [];
 
   return { record, relatedByTaxon, relatedByFamily, relatedByCountry, relatedByCollector };
 }
 
-export async function getTaxonomyTree() {
-  const rows = await prisma.$queryRaw<
-    Array<{
-      taxClass: string | null;
-      taxOrder: string | null;
-      family: string | null;
-      taxon: string | null;
-      count: number;
-    }>
-  >(Prisma.sql`
-    SELECT
-      t."taxClass" AS "taxClass",
-      t."taxOrder" AS "taxOrder",
-      t."family" AS "family",
-      t."taxon" AS "taxon",
-      CAST(COUNT(*) AS INTEGER) AS count
-    FROM "specimen_records" r
-    JOIN "taxonomies" t ON t.id = r."taxonomyId"
-    WHERE r."archivedAt" IS NULL
-    GROUP BY t."taxClass", t."taxOrder", t."family", t."taxon"
-    ORDER BY t."taxClass" ASC, t."taxOrder" ASC, t."family" ASC, t."taxon" ASC
-  `);
+export async function getCatalogRecordById(id: string) {
+  const records = await getActiveRecords();
+  return records.find((entry) => entry.id === id) ?? null;
+}
 
+export async function getRecordSitemapEntries() {
+  const records = await getActiveRecords();
+  return records
+    .slice()
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    .slice(0, 5000)
+    .map((record) => ({
+      id: record.id,
+      updatedAt: new Date(record.updatedAt),
+    }));
+}
+
+export async function getTaxonomyTree() {
+  const records = await getActiveRecords();
   const tree = new Map<
     string,
     {
@@ -457,46 +293,45 @@ export async function getTaxonomyTree() {
         {
           name: string;
           count: number;
-          families: Map<
-            string,
-            {
-              name: string;
-              count: number;
-              taxa: Array<{ name: string; count: number }>;
-            }
-          >;
+          families: Map<string, { name: string; count: number; taxa: Array<{ name: string; count: number }> }>;
         }
       >;
     }
   >();
 
-  for (const row of rows) {
-    const className = row.taxClass ?? "Unknown";
-    const orderName = row.taxOrder ?? "Unknown";
-    const familyName = row.family ?? "Unknown";
-    const taxonName = row.taxon ?? "Unknown";
+  for (const record of records) {
+    const className = record.taxonomy?.taxClass ?? "Unknown";
+    const orderName = record.taxonomy?.taxOrder ?? "Unknown";
+    const familyName = record.taxonomy?.family ?? "Unknown";
+    const taxonName = record.taxonomy?.taxon ?? "Unknown";
 
     if (!tree.has(className)) {
       tree.set(className, { name: className, count: 0, orders: new Map() });
     }
 
     const classNode = tree.get(className)!;
-    classNode.count += row.count;
+    classNode.count += 1;
 
     if (!classNode.orders.has(orderName)) {
       classNode.orders.set(orderName, { name: orderName, count: 0, families: new Map() });
     }
 
     const orderNode = classNode.orders.get(orderName)!;
-    orderNode.count += row.count;
+    orderNode.count += 1;
 
     if (!orderNode.families.has(familyName)) {
       orderNode.families.set(familyName, { name: familyName, count: 0, taxa: [] });
     }
 
     const familyNode = orderNode.families.get(familyName)!;
-    familyNode.count += row.count;
-    familyNode.taxa.push({ name: taxonName, count: row.count });
+    familyNode.count += 1;
+    const existingTaxon = familyNode.taxa.find((entry) => entry.name === taxonName);
+
+    if (existingTaxon) {
+      existingTaxon.count += 1;
+    } else {
+      familyNode.taxa.push({ name: taxonName, count: 1 });
+    }
   }
 
   return Array.from(tree.values()).map((classNode) => ({

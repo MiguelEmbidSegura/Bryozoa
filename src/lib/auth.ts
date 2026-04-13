@@ -1,14 +1,12 @@
-import { compare } from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { AuditAction, UserRole } from "@/generated/prisma/enums";
-import { prisma } from "@/lib/db";
+import { UserRole } from "@/generated/prisma/enums";
 import { env } from "@/lib/env";
 import { AUTH_COOKIE_NAME } from "@/lib/constants";
-import { writeAuditLog } from "@/lib/audit";
 
 const secret = new TextEncoder().encode(env.AUTH_SECRET);
+const ENV_ADMIN_USER_ID = "env-admin";
 
 type SessionPayload = {
   sub: string;
@@ -63,25 +61,18 @@ export async function requireAdmin() {
 }
 
 export async function loginWithCredentials(email: string, password: string) {
-  const user = await prisma.user.findUnique({
-    where: { email: email.toLowerCase().trim() },
-  });
-
-  if (!user || !user.isActive) {
-    return null;
-  }
-
-  const isValidPassword = await compare(password, user.passwordHash);
-
-  if (!isValidPassword) {
+  if (
+    email.toLowerCase().trim() !== env.ADMIN_SEED_EMAIL.toLowerCase().trim() ||
+    password !== env.ADMIN_SEED_PASSWORD
+  ) {
     return null;
   }
 
   const token = await signSession({
-    sub: user.id,
-    email: user.email,
-    role: user.role,
-    name: user.name,
+    sub: ENV_ADMIN_USER_ID,
+    email: env.ADMIN_SEED_EMAIL,
+    role: UserRole.ADMIN,
+    name: "BryoZoo Admin",
   });
 
   const cookieStore = await cookies();
@@ -93,34 +84,15 @@ export async function loginWithCredentials(email: string, password: string) {
     maxAge: 60 * 60 * 24 * 7,
   });
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { lastLoginAt: new Date() },
-  });
-
-  await writeAuditLog({
-    userId: user.id,
-    action: AuditAction.LOGIN,
-    entityType: "User",
-    entityId: user.id,
-    metadata: { email: user.email },
-  });
-
-  return user;
+  return {
+    id: ENV_ADMIN_USER_ID,
+    email: env.ADMIN_SEED_EMAIL,
+    role: UserRole.ADMIN,
+    name: "BryoZoo Admin",
+  };
 }
 
 export async function logout() {
-  const session = await getSession();
   const cookieStore = await cookies();
   cookieStore.delete(AUTH_COOKIE_NAME);
-
-  if (session) {
-    await writeAuditLog({
-      userId: session.userId,
-      action: AuditAction.LOGOUT,
-      entityType: "User",
-      entityId: session.userId,
-      metadata: { email: session.email },
-    });
-  }
 }

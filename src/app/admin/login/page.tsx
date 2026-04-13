@@ -14,10 +14,10 @@ export default function AdminLoginPage() {
               Secure curator access
             </h1>
             <p className="text-[var(--muted-foreground)]">
-              Sign in to edit records, preview imports, review logs and manage users.
+              Sign in to create, edit, archive and delete Bryozoa records.
             </p>
           </div>
-          <LoginForm redirectTo="/admin/imports" />
+          <LoginForm redirectTo="/admin/records" />
         </CardContent>
       </Card>
     </div>

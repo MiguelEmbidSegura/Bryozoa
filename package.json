@@ -18,6 +18,7 @@
     "db:start:prisma-dev": "tsx src/scripts/start-prisma-dev.ts",
     "db:stop": "tsx src/scripts/stop-local-postgres.ts",
     "db:seed": "npm run prisma:seed",
+    "export:bryozoa-json": "tsx src/scripts/export-bryozoa-json.ts",
     "import:bryozoa": "tsx src/scripts/import-bryozoa.ts"
   },
   "dependencies": {

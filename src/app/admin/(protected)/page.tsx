@@ -76,7 +76,7 @@ export default async function AdminDashboardPage() {
               </Link>
               <Link href="/admin/imports">
                 <Button variant="secondary" className="w-full">
-                  Import Excel
+                  Import dataset
                 </Button>
               </Link>
               <Link href="/admin/users">

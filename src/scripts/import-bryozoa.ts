@@ -17,7 +17,7 @@ async function main() {
 
   if ((!file && !url) || (file && url)) {
     throw new Error(
-      'Usage: npm run import:bryozoa -- (--file "C:/path/file.xlsx" | --url "https://...") [--dry-run|--commit] [--limit 100]',
+      'Usage: npm run import:bryozoa -- (--file "C:/path/file.json" | --file "C:/path/file.xlsx" | --url "https://...") [--dry-run|--commit] [--limit 100]',
     );
   }
 

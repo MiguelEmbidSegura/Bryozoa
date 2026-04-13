@@ -132,7 +132,7 @@ export default async function MapPage({
               latitude: marker.location!.latitude!,
               longitude: marker.location!.longitude!,
               title: marker.taxonomy?.taxon ?? marker.register ?? "Unknown",
-              subtitle: [marker.location?.country, marker.location?.siteName].filter(Boolean).join(" • "),
+              subtitle: [marker.location?.country, marker.location?.siteName].filter(Boolean).join(" | "),
             }))}
           syncBounds
         />
@@ -144,7 +144,7 @@ export default async function MapPage({
             Marker preview
           </h2>
           <p className="text-sm text-[var(--muted-foreground)]">
-            A text fallback remains useful when no coordinates exist in the source workbook.
+            A text fallback remains useful when no coordinates exist in the source dataset.
           </p>
         </div>
         <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">

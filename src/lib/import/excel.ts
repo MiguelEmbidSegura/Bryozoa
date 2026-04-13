@@ -1,19 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import * as XLSX from "xlsx";
-
-export type ExcelInput =
-  | { filePath: string; fileName?: string }
-  | { buffer: Buffer; fileName: string };
-
-export type ExcelSource = {
-  fileName: string;
-  sheetName: string;
-  totalRows: number;
-  headers: string[];
-  sourceHash: string;
-  iterateRows: () => Generator<Record<string, string>>;
-};
+import type { ImportInput, TabularImportSource } from "@/lib/import/types";
 
 function detectHeaders(sheet: XLSX.WorkSheet) {
   const range = XLSX.utils.decode_range(sheet["!ref"] ?? "A1");
@@ -41,7 +29,7 @@ function detectHeaders(sheet: XLSX.WorkSheet) {
   return headers;
 }
 
-export async function readExcelSource(input: ExcelInput): Promise<ExcelSource> {
+export async function readExcelSource(input: ImportInput): Promise<TabularImportSource> {
   const buffer = "buffer" in input ? input.buffer : await readFile(input.filePath);
   const sourceHash = createHash("sha1").update(buffer).digest("hex");
   const workbook = XLSX.read(buffer, { dense: false, raw: false });
@@ -58,6 +46,7 @@ export async function readExcelSource(input: ExcelInput): Promise<ExcelSource> {
     totalRows: range.e.r,
     headers: headers.map((header) => header.name),
     sourceHash,
+    sourceFormat: "excel",
     iterateRows: function* iterateRows() {
       for (let rowIndex = 1; rowIndex <= range.e.r; rowIndex++) {
         const row: Record<string, string> = {};

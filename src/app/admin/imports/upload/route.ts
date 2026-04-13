@@ -76,7 +76,7 @@ export async function POST(request: Request) {
       batch: summary.batchId,
     });
   } catch (error) {
-    console.error("[import-upload] Excel import failed:", error);
+    console.error("[import-upload] Dataset import failed:", error);
 
     return redirectWithParams(request, redirectTo, {
       error: "import-failed",

@@ -107,11 +107,11 @@ function getImportErrorMessage(
 ) {
   switch (error) {
     case "missing-file":
-      return "Choose an Excel workbook before starting the import.";
+      return "Choose a JSON or Excel file before starting the import.";
     case "import-failed":
       return typeof message === "string" && message.trim().length > 0
         ? message
-        : "The workbook could not be imported. Open the admin imports page to inspect the failure.";
+        : "The selected file could not be imported. Open the admin imports page to inspect the failure.";
     default:
       return undefined;
   }
@@ -227,7 +227,7 @@ export default async function HomePage({
             <MappedRecordsPreview markers={mapPreviewMarkers} />
             <div className="rounded-[28px] border border-[var(--border)] bg-[var(--panel)] p-5">
               <p className="text-sm text-[var(--muted-foreground)]">
-                The imported workbook contains real-world edge cases: truncated headers, partial
+                The imported dataset contains real-world edge cases: truncated headers, partial
                 dates, 0/0 coordinates, URL and filename images, and mixed bibliographic formats.
               </p>
             </div>

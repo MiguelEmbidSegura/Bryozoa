@@ -9,15 +9,15 @@ import { prisma } from "@/lib/db";
 import { writeAuditLog } from "@/lib/audit";
 import { IMPORT_LOG_DIR } from "@/lib/constants";
 import { REQUIRED_HEADERS } from "@/lib/import/columns";
-import { readExcelSource, type ExcelInput } from "@/lib/import/excel";
 import {
   normalizeKeyPart,
   normalizeUnknown,
   prepareImportRow,
   type ImportIssueDraft,
 } from "@/lib/import/normalizers";
+import { readImportSource, type ImportInput } from "@/lib/import/source";
 
-type ImportOptions = ExcelInput & {
+type ImportOptions = ImportInput & {
   dryRun?: boolean;
   limit?: number;
   initiatedByUserId?: string | null;
@@ -168,14 +168,14 @@ async function ensurePerson(cache: Map<string, string>, rawName: string | null) 
 
 export async function importBryozoaWorkbook(options: ImportOptions): Promise<ImportSummary> {
   const dryRun = options.dryRun ?? true;
-  const excel = await readExcelSource(options);
-  const missingHeaders = REQUIRED_HEADERS.filter((header) => !excel.headers.includes(header));
+  const source = await readImportSource(options);
+  const missingHeaders = REQUIRED_HEADERS.filter((header) => !source.headers.includes(header));
   const batchSummaryBase = {
     ...asSummaryObject(undefined),
-    headers: excel.headers,
+    headers: source.headers,
     missingHeaders,
     sourceUrl: options.sourceUrl ?? null,
-    sourceType: options.sourceType ?? "excel",
+    sourceType: options.sourceType ?? source.sourceFormat,
     phase: "importing",
     autoBootstrap: options.sourceType === "auto-bootstrap",
   };
@@ -184,13 +184,13 @@ export async function importBryozoaWorkbook(options: ImportOptions): Promise<Imp
     : (
         await prisma.importBatch.create({
           data: {
-            sourceFile: excel.fileName,
-            sourceHash: excel.sourceHash,
-            sourceType: options.sourceType ?? "excel",
-            sheetName: excel.sheetName,
+            sourceFile: source.fileName,
+            sourceHash: source.sourceHash,
+            sourceType: options.sourceType ?? source.sourceFormat,
+            sheetName: source.sheetName,
             dryRun,
             status: ImportStatus.RUNNING,
-            totalRows: excel.totalRows,
+            totalRows: source.totalRows,
             summary: buildProgressSummary(batchSummaryBase),
           },
           select: { id: true },
@@ -206,13 +206,13 @@ export async function importBryozoaWorkbook(options: ImportOptions): Promise<Imp
     await prisma.importBatch.update({
       where: { id: options.existingBatchId },
       data: {
-        sourceFile: excel.fileName,
-        sourceHash: excel.sourceHash,
-        sourceType: options.sourceType ?? "excel",
-        sheetName: excel.sheetName,
+        sourceFile: source.fileName,
+        sourceHash: source.sourceHash,
+        sourceType: options.sourceType ?? source.sourceFormat,
+        sheetName: source.sheetName,
         dryRun,
         status: ImportStatus.RUNNING,
-        totalRows: excel.totalRows,
+        totalRows: source.totalRows,
         processedRows: 0,
         createdCount: 0,
         updatedCount: 0,
@@ -250,8 +250,8 @@ export async function importBryozoaWorkbook(options: ImportOptions): Promise<Imp
         warningCount,
         summary: buildProgressSummary(batchSummaryBase, {
           phase: "importing",
-          sourceFile: excel.fileName,
-          sheetName: excel.sheetName,
+          sourceFile: source.fileName,
+          sheetName: source.sheetName,
         }),
       },
     });
@@ -261,14 +261,14 @@ export async function importBryozoaWorkbook(options: ImportOptions): Promise<Imp
     issuesBuffer.push({
       severity: ImportSeverity.ERROR,
       code: "MISSING_HEADER",
-      message: `Required header "${header}" was not found in the worksheet.`,
+      message: `Required header "${header}" was not found in the source file.`,
       field: header,
     });
   }
 
   try {
     let index = 0;
-    for (const row of excel.iterateRows()) {
+    for (const row of source.iterateRows()) {
       const rowNumber = index + 2;
       index += 1;
 
@@ -405,16 +405,16 @@ export async function importBryozoaWorkbook(options: ImportOptions): Promise<Imp
 
     const summary = {
       batchId,
-      sourceFile: excel.fileName,
+      sourceFile: source.fileName,
       dryRun,
-      totalRows: excel.totalRows,
+      totalRows: source.totalRows,
       processedRows,
       createdCount,
       updatedCount,
       skippedCount,
       errorCount,
       warningCount,
-      sheetName: excel.sheetName,
+      sheetName: source.sheetName,
       issuesPreview,
     } satisfies ImportSummary;
 

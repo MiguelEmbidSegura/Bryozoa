@@ -56,7 +56,7 @@ export function DatabaseSetupState({
                 <p>
                   <code>
                     npm run import:bryozoa -- --file{" "}
-                    &quot;c:/Users/PRT/Downloads/ALL_Bryozoa_Synthesys-Miguel_fusionado.xlsx&quot; --commit
+                    &quot;c:/BRIOZOO/data/ALL_Bryozoa.json&quot; --commit
                   </code>
                 </p>
               </div>

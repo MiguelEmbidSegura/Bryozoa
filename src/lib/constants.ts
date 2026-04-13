@@ -11,5 +11,6 @@ export const DEFAULT_BOOTSTRAP_RECORD_FLOOR = Number.parseInt(
   process.env.DEFAULT_BOOTSTRAP_RECORD_FLOOR ?? "37000",
   10,
 );
-export const LOCAL_WORKBOOK_PATH = process.env.LOCAL_WORKBOOK_PATH ?? "";
+export const LOCAL_BOOTSTRAP_SOURCE_PATH =
+  process.env.LOCAL_BOOTSTRAP_SOURCE_PATH ?? process.env.LOCAL_WORKBOOK_PATH ?? "";
 export const AUTO_BOOTSTRAP_STALE_MS = 12 * 60 * 1000;

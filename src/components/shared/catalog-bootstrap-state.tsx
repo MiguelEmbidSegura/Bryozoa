@@ -179,7 +179,7 @@ export function CatalogBootstrapState({
               />
             </div>
             <p className="text-sm text-[var(--muted-foreground)]">
-              Source workbook: <code>{status.fileName ?? "default Google Sheets workbook"}</code>
+              Source file: <code>{status.fileName ?? "bundled Bryozoa dataset"}</code>
             </p>
           </div>
 

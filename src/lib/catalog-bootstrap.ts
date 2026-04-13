@@ -8,7 +8,7 @@ import {
   AUTO_BOOTSTRAP_STALE_MS,
   DEFAULT_BOOTSTRAP_RECORD_FLOOR,
   DEFAULT_BOOTSTRAP_WORKBOOK_URL,
-  LOCAL_WORKBOOK_PATH,
+  LOCAL_BOOTSTRAP_SOURCE_PATH,
 } from "@/lib/constants";
 import { downloadRemoteWorkbook } from "@/lib/import/remote";
 import { importBryozoaWorkbook } from "@/lib/import/service";
@@ -66,7 +66,7 @@ function getBootstrapMessage(
   targetRecordFloor: number,
 ) {
   if (!batch) {
-    return "Preparing the default Bryozoa catalogue import.";
+    return "Preparing the bundled Bryozoa catalogue import.";
   }
 
   if (batch.status === ImportStatus.FAILED) {
@@ -77,12 +77,12 @@ function getBootstrapMessage(
     );
   }
 
-  if (phase === "downloading") {
-    return "Downloading the default Bryozoa workbook from Google Sheets.";
+  if (phase === "loading-source") {
+    return "Loading the bundled Bryozoa source file.";
   }
 
   if (phase === "reading") {
-    return "Reading workbook headers and preparing the import.";
+    return "Reading source headers and preparing the import.";
   }
 
   if (batch.totalRows > 0 && batch.processedRows > 0) {
@@ -149,7 +149,7 @@ export async function getCatalogBootstrapStatus(): Promise<CatalogBootstrapStatu
         ? summary.phase
         : latestBatch.totalRows > 0
           ? "importing"
-          : "downloading";
+          : "loading-source";
     const stale = isBatchStale(latestBatch);
 
     if (
@@ -214,7 +214,7 @@ export async function getCatalogBootstrapStatus(): Promise<CatalogBootstrapStatu
       processedRows: 0,
       totalRows: 0,
       statusLabel: "WAITING",
-      message: "Preparing the default Bryozoa catalogue import.",
+      message: "Preparing the bundled Bryozoa catalogue import.",
       startedAt: null,
       updatedAt: null,
       fileName: null,
@@ -294,7 +294,7 @@ export async function ensureCatalogBootstrapBatch() {
 
   const batch = await prisma.importBatch.create({
     data: {
-      sourceFile: "Default Bryozoa catalogue workbook",
+      sourceFile: "Bundled Bryozoa catalogue dataset",
       sourceType: AUTO_BOOTSTRAP_SOURCE_TYPE,
       dryRun: false,
       status: ImportStatus.PENDING,
@@ -311,28 +311,30 @@ export async function ensureCatalogBootstrapBatch() {
   return { batchId: batch.id, shouldStart: true };
 }
 
-function getLocalWorkbookCandidates() {
+function getLocalBootstrapCandidates() {
   const candidates = [
+    resolve(process.cwd(), "ALL_Bryozoa.json"),
+    resolve(process.cwd(), "data", "ALL_Bryozoa.json"),
     resolve(process.cwd(), "ALL_Bryozoa.xlsx"),
     resolve(process.cwd(), "data", "ALL_Bryozoa.xlsx"),
   ];
 
-  if (LOCAL_WORKBOOK_PATH.trim()) {
-    candidates.unshift(resolve(LOCAL_WORKBOOK_PATH.trim()));
+  if (LOCAL_BOOTSTRAP_SOURCE_PATH.trim()) {
+    candidates.unshift(resolve(LOCAL_BOOTSTRAP_SOURCE_PATH.trim()));
   }
 
   return candidates;
 }
 
-async function loadLocalWorkbook() {
-  const candidates = getLocalWorkbookCandidates();
+async function loadLocalBootstrapSource() {
+  const candidates = getLocalBootstrapCandidates();
 
   for (const candidate of candidates) {
     if (existsSync(candidate)) {
       const buffer = await readFile(candidate);
       if (buffer.length > 0) {
-        const fileName = candidate.split(/[\\/]/).at(-1) ?? "local-workbook.xlsx";
-        console.log(`[catalog-bootstrap] Using local workbook: ${candidate}`);
+        const fileName = candidate.split(/[\\/]/).at(-1) ?? "local-bootstrap-source.json";
+        console.log(`[catalog-bootstrap] Using local source file: ${candidate}`);
         return { buffer, fileName, filePath: candidate };
       }
     }
@@ -350,31 +352,31 @@ export async function runCatalogBootstrapImport(batchId: string) {
       summary: {
         autoBootstrap: true,
         sourceUrl: DEFAULT_BOOTSTRAP_WORKBOOK_URL,
-        phase: "downloading",
+        phase: "loading-source",
         targetRecordFloor: DEFAULT_BOOTSTRAP_RECORD_FLOOR,
       },
     },
   });
 
   try {
-    // Try local workbook first, then fall back to remote download.
-    const localWorkbook = await loadLocalWorkbook();
+    // Try a bundled local source first, then fall back to the remote workbook.
+    const localSource = await loadLocalBootstrapSource();
 
-    const workbookSource = localWorkbook
+    const importSource = localSource
       ? {
-          buffer: localWorkbook.buffer,
-          fileName: localWorkbook.fileName,
-          sourceUrl: `file://${localWorkbook.filePath}`,
+          buffer: localSource.buffer,
+          fileName: localSource.fileName,
+          sourceUrl: `file://${localSource.filePath}`,
         }
       : await downloadRemoteWorkbook(DEFAULT_BOOTSTRAP_WORKBOOK_URL);
 
     await importBryozoaWorkbook({
-      buffer: workbookSource.buffer,
-      fileName: workbookSource.fileName,
+      buffer: importSource.buffer,
+      fileName: importSource.fileName,
       dryRun: false,
       initiatedByUserId: null,
       sourceType: AUTO_BOOTSTRAP_SOURCE_TYPE,
-      sourceUrl: "sourceUrl" in workbookSource ? workbookSource.sourceUrl : DEFAULT_BOOTSTRAP_WORKBOOK_URL,
+      sourceUrl: "sourceUrl" in importSource ? importSource.sourceUrl : DEFAULT_BOOTSTRAP_WORKBOOK_URL,
       existingBatchId: batchId,
       progressEveryRows: 250,
     });

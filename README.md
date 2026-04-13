@@ -14,11 +14,13 @@ Modern Bryozoa catalogue and curation app built with Next.js, TypeScript, Tailwi
   - Secure credential login with signed HTTP-only cookie sessions
   - Record create/edit/archive/delete
   - Image and reference editing
-  - Excel upload import with dry-run support
+  - JSON / Excel upload import with dry-run support
   - Import batch history and import issues
   - Audit log and basic admin user management
 - Data/import:
+  - Bundled JSON bootstrap file loaded automatically on first start
   - Real Excel parser based on `xlsx`
+  - Canonical Excel-to-JSON export script
   - Header normalization and resilient parsing for truncated/inconsistent columns
   - Separate relations for images and references
   - Deduplication by `Register`, then `OID_`, then stable generated key
@@ -142,75 +144,61 @@ Open:
 
 ## Import commands
 
-Dry run:
+The app now includes a bundled dataset at `data/ALL_Bryozoa.json`.
+On a fresh database, the home page bootstrap imports that local JSON automatically into PostgreSQL.
+
+Rebuild the bundled JSON from the original Excel:
 
 ```bash
-npm run import:bryozoa -- --file "c:/Users/PRT/Downloads/ALL_Bryozoa.xlsx" --dry-run
+npm run export:bryozoa-json -- --file "c:/BRIOZOO/ALL_Bryozoa.xlsx" --out "c:/BRIOZOO/data/ALL_Bryozoa.json"
 ```
 
-Commit import:
+Dry run from JSON:
 
 ```bash
-npm run import:bryozoa -- --file "c:/Users/PRT/Downloads/ALL_Bryozoa.xlsx" --commit
+npm run import:bryozoa -- --file "c:/BRIOZOO/data/ALL_Bryozoa.json" --dry-run
+```
+
+Commit import from JSON:
+
+```bash
+npm run import:bryozoa -- --file "c:/BRIOZOO/data/ALL_Bryozoa.json" --commit
+```
+
+Import directly from Excel when needed:
+
+```bash
+npm run import:bryozoa -- --file "c:/BRIOZOO/ALL_Bryozoa.xlsx" --commit
 ```
 
 Limit rows for testing:
 
 ```bash
-npm run import:bryozoa -- --file "c:/Users/PRT/Downloads/ALL_Bryozoa.xlsx" --dry-run --limit 250
+npm run import:bryozoa -- --file "c:/BRIOZOO/data/ALL_Bryozoa.json" --dry-run --limit 250
 ```
 
-The same import service is also available from `/admin/imports` via file upload.
+The same import service is also available from `/admin/imports` via file upload, and the admin
+form accepts `.json`, `.xlsx`, and `.xls`.
 
 Vercel note:
 
-- Vercel serverless functions reject inbound payloads larger than `4.5 MB`
-- if your workbook is larger than that, use the new `Import from URL` option in `/admin/imports`
-- this lets the server download the `.xlsx` from a public URL instead of receiving the whole file in the request body
-- the web form now accepts Google Sheets share links directly and converts them to the `.xlsx` export automatically
+- Vercel serverless functions can reject large inbound uploads with `413 payload too large`
+- prefer the bundled local JSON bootstrap or the CLI import for large datasets
+- the CLI still supports `--url` as a fallback for remote `.xlsx` / Google Sheets sources
 
-Import directly from a public URL:
-
-```bash
-npm run import:bryozoa -- --url "https://example.com/ALL_Bryozoa.xlsx" --commit
-```
-
-Import directly from a Google Sheets share link:
+Optional remote fallback:
 
 ```bash
 npm run import:bryozoa -- --url "https://docs.google.com/spreadsheets/d/1aLwM2E2FZoIP-_9Gp7DZ7-j1q5QPn_b4/edit?usp=sharing" --commit
 ```
 
-### Import from the web on Vercel
-
-Use this flow when the workbook is too large for a normal browser upload:
-
-1. Deploy the latest code to Vercel.
-2. Sign in as admin.
-3. Open `/admin/imports`.
-4. Use `Import from URL` instead of the file picker.
-5. Paste the public Google Sheets share link, for example:
-
-```text
-https://docs.google.com/spreadsheets/d/1aLwM2E2FZoIP-_9Gp7DZ7-j1q5QPn_b4/edit?usp=sharing&ouid=105020359161972775426&rtpof=true&sd=true
-```
-
-6. Disable `Dry run / preview` if you want to populate the real catalogue.
-7. Submit the import and wait for the batch to finish.
-
-Important:
-
-- the app now accepts the normal Google Sheets `.../edit?...` share URL directly
-- the server converts it automatically to the `.xlsx` export URL
-- the Google Sheet must be public enough to download without requiring a login
-
 ### Why production can still show fewer records
 
-The public site does not read Google Sheets live. It reads the PostgreSQL database.
+The public site does not read the JSON or Excel source file live. It reads the PostgreSQL database.
 
 That means:
 
-- fixing the upload flow does not backfill old production data by itself
+- updating `data/ALL_Bryozoa.json` does not backfill old production data by itself
 - if production still shows numbers such as `9,181` records, that production database has not completed the full committed import yet
 - once the import finishes against the production `DATABASE_URL`, the home page and explorer counts will reflect the full dataset
 
@@ -235,7 +223,8 @@ npm run db:stop
 npm run prisma:migrate
 npm run prisma:push
 npm run db:seed
-npm run import:bryozoa -- --file "<path-to-xlsx>" --dry-run
+npm run export:bryozoa-json -- --file "<path-to-xlsx>" --out "data/ALL_Bryozoa.json"
+npm run import:bryozoa -- --file "<path-to-json-or-xlsx>" --dry-run
 ```
 
 ## Update GitHub and Vercel

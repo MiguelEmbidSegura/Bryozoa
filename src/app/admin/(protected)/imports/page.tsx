@@ -13,11 +13,11 @@ function getImportErrorMessage(
 ) {
   switch (error) {
     case "missing-file":
-      return "Choose an Excel workbook before running the import.";
+      return "Choose a JSON or Excel file before running the import.";
     case "import-failed":
       return typeof message === "string" && message.trim().length > 0
         ? message
-        : "The workbook could not be imported. Check the server logs for more detail.";
+        : "The selected file could not be imported. Check the server logs for more detail.";
     default:
       return undefined;
   }
@@ -64,7 +64,7 @@ export default async function AdminImportsPage({
           Imports
         </p>
         <h2 className="font-serif text-4xl font-semibold text-[var(--foreground)]">
-          Preview and commit Excel imports
+          Preview and commit JSON or Excel imports
         </h2>
       </section>
 

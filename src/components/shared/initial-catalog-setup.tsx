@@ -32,12 +32,11 @@ export function InitialCatalogSetup({
 
             <div className="space-y-4">
               <h1 className="max-w-4xl font-serif text-4xl font-semibold tracking-tight text-[var(--foreground)] md:text-5xl">
-                Start the catalogue by uploading the Bryozoa Excel workbook.
+                Start the catalogue by importing a Bryozoa dataset file.
               </h1>
               <p className="max-w-2xl text-base leading-7 text-[var(--muted-foreground)] md:text-lg">
-                The public site stays empty until the first spreadsheet import finishes. Once the
-                workbook is committed, the catalogue, taxonomy view and map become available for
-                everyone.
+                The public site stays empty until the first dataset import finishes. Once the file
+                is committed, the catalogue, taxonomy view and map become available for everyone.
               </p>
             </div>
 
@@ -52,10 +51,9 @@ export function InitialCatalogSetup({
 
               <div className="rounded-[24px] border border-[var(--border)] bg-[var(--muted)] p-5">
                 <FileSpreadsheet className="h-5 w-5 text-[var(--accent)]" />
-                <p className="mt-3 font-medium text-[var(--foreground)]">2. Choose the workbook</p>
+                <p className="mt-3 font-medium text-[var(--foreground)]">2. Choose the file</p>
                 <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                  Upload the `.xlsx` file or paste a public Google Sheets link with the Bryozoa
-                  records.
+                  Upload the `.json`, `.xlsx`, or `.xls` file with the Bryozoa records.
                 </p>
               </div>
 
@@ -79,7 +77,7 @@ export function InitialCatalogSetup({
                     Admin login
                   </p>
                   <h2 className="font-serif text-3xl font-semibold text-[var(--foreground)]">
-                    Sign in to unlock the Excel import
+                    Sign in to unlock dataset import
                   </h2>
                   <p className="text-sm text-[var(--muted-foreground)]">
                     After signing in, this same page will switch to the upload form automatically.
@@ -91,10 +89,10 @@ export function InitialCatalogSetup({
               <>
                 <div className="space-y-2">
                   <p className="text-xs uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                    Upload workbook
+                    Upload file
                   </p>
                   <h2 className="font-serif text-3xl font-semibold text-[var(--foreground)]">
-                    Import the first Excel now
+                    Import the first dataset now
                   </h2>
                   <p className="text-sm text-[var(--muted-foreground)]">
                     This setup import commits directly to the database so the catalogue opens as
@@ -105,7 +103,7 @@ export function InitialCatalogSetup({
                   redirectTo="/"
                   errorMessage={importErrorMessage}
                   showDryRun={false}
-                  submitLabel="Import Excel and open catalogue"
+                  submitLabel="Import file and open catalogue"
                 />
               </>
             )}
@@ -123,11 +121,11 @@ export function InitialCatalogSetup({
               <div>
                 <p className="font-medium text-[var(--foreground)]">{latestBatch.sourceFile}</p>
                 <p className="text-sm text-[var(--muted-foreground)]">
-                  {latestBatch.dryRun ? "Dry run" : "Committed"} • {latestBatch.status}
+                  {latestBatch.dryRun ? "Dry run" : "Committed"} | {latestBatch.status}
                 </p>
               </div>
               <p className="text-sm text-[var(--muted-foreground)]">
-                Rows {latestBatch.processedRows} • Errors {latestBatch.errorCount} • Warnings{" "}
+                Rows {latestBatch.processedRows} | Errors {latestBatch.errorCount} | Warnings{" "}
                 {latestBatch.warningCount}
               </p>
             </div>

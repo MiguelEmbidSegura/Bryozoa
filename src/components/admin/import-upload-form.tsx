@@ -40,12 +40,17 @@ export function ImportUploadForm({
       >
         <input type="hidden" name="redirectTo" value={redirectTo} />
         <div className="space-y-2">
-          <Label htmlFor="file">Excel workbook</Label>
-          <Input id="file" name="file" type="file" accept=".xlsx,.xls" />
+          <Label htmlFor="file">Dataset file</Label>
+          <Input id="file" name="file" type="file" accept=".json,.xlsx,.xls" />
+          <p className="text-xs text-[var(--muted-foreground)]">
+            Accepted formats: `.json`, `.xlsx`, `.xls`. JSON can be a BryoZoo export with
+            `headers` and `rows`, or a plain array of row objects keyed by the original Bryozoa
+            column names.
+          </p>
           {isVercel ? (
             <p className="text-xs text-[var(--muted-foreground)]">
-              Large files can fail on Vercel with a `413 payload too large`. If your workbook is
-              bigger than 4.5 MB, use the URL import below.
+              Large uploads can still fail on Vercel with `413 payload too large`. For production,
+              prefer the bundled local JSON file or the CLI import.
             </p>
           ) : null}
         </div>
@@ -57,45 +62,6 @@ export function ImportUploadForm({
           {showDryRun ? (
             <Button type="submit" name="dryRun" value="on" variant="secondary">
               Preview only
-            </Button>
-          ) : null}
-        </div>
-      </form>
-
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--muted)]/50 p-4">
-        <p className="text-xs uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
-          Vercel-safe fallback
-        </p>
-        <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-          Paste a public workbook URL or a Google Sheets share link. The server downloads the file
-          itself and converts Google Sheets links automatically, which avoids Vercel&apos;s request
-          payload limit.
-        </p>
-      </div>
-
-      <form
-        action="/admin/imports/url"
-        method="post"
-        className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end"
-      >
-        <input type="hidden" name="redirectTo" value={redirectTo} />
-        <div className="space-y-2">
-          <Label htmlFor="sourceUrl">Workbook URL</Label>
-          <Input
-            id="sourceUrl"
-            name="sourceUrl"
-            type="url"
-            placeholder="https://docs.google.com/spreadsheets/d/.../edit?usp=sharing"
-          />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" name="dryRun" value="off" variant="secondary">
-            Import URL into catalogue
-          </Button>
-          {showDryRun ? (
-            <Button type="submit" name="dryRun" value="on" variant="ghost">
-              Preview URL only
             </Button>
           ) : null}
         </div>

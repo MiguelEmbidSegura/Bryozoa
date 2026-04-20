@@ -1,348 +1,205 @@
-# BryoZoo
+# Catalogo de Briozoos Web
 
-Modern Bryozoa catalogue and curation app built with Next.js, TypeScript, Tailwind, Prisma and PostgreSQL.
+Version web moderna del catalogo, pensada para despliegue estatico y uso sin backend obligatorio.
 
-## What is included
+Directorio del proyecto:
 
-- Public catalogue:
-  - Home page with KPIs and entry points by class, order, family and country
-  - Explorer with server-side search, filters, sorting, pagination and table/card views
-  - Record detail pages with taxonomy, locality, chronology, related records, media and exports
-  - Interactive map with clustering, visible-area filtering and radius search inputs
-  - Taxonomy hierarchy view with record counts
-- Admin:
-  - Secure credential login with signed HTTP-only cookie sessions
-  - Record create/edit/archive/delete
-  - Image and reference editing
-  - JSON / Excel upload import with dry-run support
-  - Import batch history and import issues
-  - Audit log and basic admin user management
-- Data/import:
-  - Bundled JSON bootstrap file loaded automatically on first start
-  - Real Excel parser based on `xlsx`
-  - Canonical Excel-to-JSON export script
-  - Header normalization and resilient parsing for truncated/inconsistent columns
-  - Separate relations for images and references
-  - Deduplication by `Register`, then `OID_`, then stable generated key
-  - `0/0` coordinates treated as invalid for map use
-  - Partial date parsing into raw year/month/day + precision + qualifier
-  - Import log JSON files written to `data/import-logs/`
+`\\smicro14\cienciadigital\Briozoos_Franceses\bryozoa_catalog_web`
+
+## Que incluye
+
+- Interfaz mapa-primero: el mapa se ve antes que el listado.
+- Carga local de `JSON`, `XLSX` y `XLS` directamente en navegador.
+- Filtros en vivo por busqueda, pais, familia, tipo, clase, orden y presencia de contenido.
+- Ficha visible a un clic desde mapa o tarjetas.
+- Dos tipos de icono en el mapa:
+  - registros con fotos
+  - registros sin fotos
+- Exportacion del subconjunto filtrado a `JSON`.
+- Muestra incluida en `public/data/ejemplo.json`.
 
 ## Stack
 
-- `Next.js 16` with App Router
 - `React 19`
-- `Tailwind CSS 4`
-- `Prisma 7` + PostgreSQL
-- `React Hook Form` + `Zod`
-- `Leaflet` + clustering
-- `yet-another-react-lightbox`
-- Signed cookie auth with `jose`
+- `TypeScript`
+- `Vite`
+- `MapLibre GL JS`
+- `xlsx` para leer Excel en cliente
 
-## Data model
+## Estructura
 
-Prisma models:
+```text
+bryozoa_catalog_web/
+  index.html
+  package.json
+  vite.config.ts
+  README.md
+  public/
+    favicon.svg
+    icons.svg
+    data/
+      ejemplo.json
+  src/
+    App.tsx
+    index.css
+    main.tsx
+    components/
+      CatalogMap.tsx
+      FiltersPanel.tsx
+      RecordSpotlight.tsx
+      ResultsList.tsx
+    lib/
+      catalog.ts
+```
 
-- `SpecimenRecord`
-- `Taxonomy`
-- `Location`
-- `Person`
-- `ImageAsset`
-- `BibliographicReference`
-- `ImportBatch`
-- `ImportIssue`
-- `AuditLog`
-- `User`
+## Ejecutar en local
 
-Important normalization decisions:
+No abras `index.html` con doble clic. Esta aplicacion debe servirse por `http://localhost` o por un hosting estatico como Vercel o GitHub Pages.
 
-- raw imported row is preserved in `SpecimenRecord.rawData`
-- normalized text converts empty / `Unknown` / `n/a` style values to `null`
-- coordinates are stored both as raw strings and parsed numeric values
-- `Collection_date` is stored as `collectionDateRaw`, `parsedYear`, `parsedMonth`, `parsedDay`, `datePrecision`, `dateQualifier`
+### Instalacion
 
-## Environment
-
-Copy `.env.example` to `.env` and adjust as needed.
-
-Required variables:
-
-- `DATABASE_URL`
-- `APP_URL`
-- `AUTH_SECRET`
-- `ADMIN_SEED_EMAIL`
-- `ADMIN_SEED_PASSWORD`
-
-## Local setup
-
-1. Install dependencies
-
-```bash
+```powershell
+Set-Location '\\smicro14\cienciadigital\Briozoos_Franceses\bryozoa_catalog_web'
 npm install
 ```
 
-2. Configure the environment
+Si PowerShell bloquea `npm.ps1`, usa `npm.cmd`:
 
-```bash
-cp .env.example .env
+```powershell
+npm.cmd install
 ```
 
-3. Start PostgreSQL
+Lo mismo aplica a `npx` y a `vercel`: en PowerShell usa `npx.cmd` o `vercel.cmd`, no el comando sin extension.
 
-Option A: local PostgreSQL already installed
+### Desarrollo
 
-Option B: Docker Compose
-
-```bash
-docker compose up -d db
-```
-
-Option C: embedded local PostgreSQL, useful when Docker or a full PostgreSQL install is not available
-
-```bash
-npm run db:start
-```
-
-This starts a real local PostgreSQL server inside `data/postgres/` and writes the
-matching `DATABASE_URL` into `.env`.
-
-4. Generate Prisma client
-
-```bash
-npm run prisma:generate
-```
-
-5. Apply migrations
-
-```bash
-npm run prisma:migrate
-```
-
-In this project `npm run prisma:migrate` uses `prisma db push` for the fastest local bootstrap.
-If you want to evolve SQL migrations during development, use:
-
-```bash
-npm run prisma:migrate:dev
-```
-
-6. Seed the first admin user
-
-```bash
-npm run db:seed
-```
-
-7. Start the app
-
-```bash
+```powershell
 npm run dev
 ```
 
-Open:
+Tambien puedes lanzar directamente:
 
-- public app: `http://localhost:3000`
-- admin login: `http://localhost:3000/admin/login`
-
-## Import commands
-
-The app now includes a bundled dataset at `data/ALL_Bryozoa.json`.
-On a fresh database, the home page bootstrap imports that local JSON automatically into PostgreSQL.
-
-Rebuild the bundled JSON from the original Excel:
-
-```bash
-npm run export:bryozoa-json -- --file "c:/BRIOZOO/ALL_Bryozoa.xlsx" --out "c:/BRIOZOO/data/ALL_Bryozoa.json"
+```powershell
+.\run_web_dev.bat
 ```
 
-Dry run from JSON:
+### Build de produccion
 
-```bash
-npm run import:bryozoa -- --file "c:/BRIOZOO/data/ALL_Bryozoa.json" --dry-run
-```
-
-Commit import from JSON:
-
-```bash
-npm run import:bryozoa -- --file "c:/BRIOZOO/data/ALL_Bryozoa.json" --commit
-```
-
-Import directly from Excel when needed:
-
-```bash
-npm run import:bryozoa -- --file "c:/BRIOZOO/ALL_Bryozoa.xlsx" --commit
-```
-
-Limit rows for testing:
-
-```bash
-npm run import:bryozoa -- --file "c:/BRIOZOO/data/ALL_Bryozoa.json" --dry-run --limit 250
-```
-
-The same import service is also available from `/admin/imports` via file upload, and the admin
-form accepts `.json`, `.xlsx`, and `.xls`.
-
-Vercel note:
-
-- Vercel serverless functions can reject large inbound uploads with `413 payload too large`
-- prefer the bundled local JSON bootstrap or the CLI import for large datasets
-- the CLI still supports `--url` as a fallback for remote `.xlsx` / Google Sheets sources
-
-Optional remote fallback:
-
-```bash
-npm run import:bryozoa -- --url "https://docs.google.com/spreadsheets/d/1aLwM2E2FZoIP-_9Gp7DZ7-j1q5QPn_b4/edit?usp=sharing" --commit
-```
-
-### Why production can still show fewer records
-
-The public site does not read the JSON or Excel source file live. It reads the PostgreSQL database.
-
-That means:
-
-- updating `data/ALL_Bryozoa.json` does not backfill old production data by itself
-- if production still shows numbers such as `9,181` records, that production database has not completed the full committed import yet
-- once the import finishes against the production `DATABASE_URL`, the home page and explorer counts will reflect the full dataset
-
-Quick checks:
-
-- make sure the import was run with `Dry run / preview` disabled
-- make sure Vercel is pointing to the intended `DATABASE_URL`
-- make sure the import batch finishes as `COMPLETED`, not `DRY_RUN` or `FAILED`
-
-## Useful scripts
-
-```bash
-npm run dev
+```powershell
 npm run build
-npm run start
-npm run lint
-npm run test
-npm run prisma:generate
-npm run db:start
-npm run db:start:prisma-dev
-npm run db:stop
-npm run prisma:migrate
-npm run prisma:push
-npm run db:seed
-npm run export:bryozoa-json -- --file "<path-to-xlsx>" --out "data/ALL_Bryozoa.json"
-npm run import:bryozoa -- --file "<path-to-json-or-xlsx>" --dry-run
 ```
 
-## Update GitHub and Vercel
+### Vista previa del build
 
-Current repo defaults:
-
-- Git remote: `origin -> https://github.com/MiguelEmbidSegura/Bryozoa.git`
-- Main branch: `main`
-
-Recommended flow to update GitHub safely:
-
-```bash
-git status
-git pull --rebase origin main
-git add README.md src/
-git commit -m "Describe your change"
-git push origin main
+```powershell
+npm run preview
 ```
 
-If you want to publish all local changes that are not ignored:
+O con el lanzador preparado:
 
-```bash
-git add -A
-git commit -m "Describe your change"
-git push origin main
+```powershell
+.\run_web_preview.bat
 ```
 
-Important:
+## Comportamiento de datos
 
-- Avoid `git add .` if you do not want to upload local files such as `ALL_Bryozoa.xlsx`
-- A push to `main` is the usual trigger for updating GitHub and, if connected, Vercel production too
+La web replica la logica util del escritorio, pero adaptada al navegador:
 
-If Vercel is already connected to GitHub:
+- Lee la primera hoja del Excel.
+- Recorta las columnas fantasma de Excels con dimension inflada.
+- Normaliza cabeceras y corrige variantes como `Order_`, `Longitud`, `Date Qualifier`, `Donor / Collection` e `Indentifie`.
+- Si faltan columnas conocidas, las completa como `N/A`.
+- Si no existe `OID_`, lo genera automaticamente.
+- El mapa solo representa registros con coordenadas validas.
+- Los iconos cambian segun haya fotos o no en los campos `Image1` a `Image17`.
 
-- `git push origin main` should trigger a production deployment
-- pushing another branch usually creates a preview deployment
+## Limitaciones importantes
 
-Manual Vercel deploy with CLI:
+- Al ejecutarse en navegador, las rutas locales de imagen tipo `C:\...` o `\\servidor\...` no se pueden abrir directamente por seguridad del navegador.
+- Las imagenes se previsualizan bien si son URLs `http(s)` o rutas web accesibles desde la propia aplicacion desplegada.
+- Aunque una imagen no se pueda previsualizar, el registro seguira marcado como "con fotos" si los campos de imagen contienen informacion.
 
-```bash
-npm install -g vercel
-vercel login
-vercel link
-vercel
-vercel --prod
+## Diseno y uso
+
+- El mapa es el punto de entrada principal.
+- La ficha destacada aparece justo debajo del mapa.
+- El listado queda despues, como apoyo para navegar o comparar.
+- El clic sobre marcador o tarjeta selecciona el registro y lo enfoca.
+
+## Despliegue
+
+### Recomendacion: Vercel
+
+Para este proyecto, `Vercel` es la opcion mas directa:
+
+- Detecta proyectos `Vite` automaticamente.
+- Encaja bien con sitios estaticos.
+- Es comodo para previews por rama o pull request.
+
+Pasos minimos:
+
+1. Sube este directorio a un repositorio Git.
+2. Importa el repositorio en Vercel.
+3. Vercel detectara `Vite`.
+4. Build command: `npm run build`
+5. Output directory: `dist`
+
+Referencia oficial:
+
+- Vite static deploy: https://vite.dev/guide/static-deploy.html
+- Vite on Vercel: https://vercel.com/docs/frameworks/frontend/vite
+
+### Despliegue desde PowerShell en Windows
+
+Si PowerShell bloquea `npm.ps1` o `npx.ps1`, no hace falta cambiar la politica de ejecucion del equipo. Usa una de estas dos opciones:
+
+```powershell
+npx.cmd vercel@latest login
+npx.cmd vercel@latest link --project bryozoasendino
+npx.cmd vercel@latest --prod
 ```
 
-Useful Vercel commands:
+O bien usa los lanzadores incluidos en este directorio:
 
-```bash
-vercel env ls
-vercel env pull .env.vercel.local
-vercel list
-vercel logs
+```powershell
+.\vercel_cli.bat login
+.\vercel_cli.bat link --project bryozoasendino
+.\deploy_vercel_prod.bat
 ```
 
-Environment variables to configure in Vercel:
+Notas practicas:
 
-- `DATABASE_URL`
-- `APP_URL`
-- `AUTH_SECRET`
-- `ADMIN_SEED_EMAIL`
-- `ADMIN_SEED_PASSWORD`
-- `NEXT_PUBLIC_MAP_TILE_URL`
-- `NEXT_PUBLIC_MAP_ATTRIBUTION`
+- `vercel_cli.bat` ejecuta `npx.cmd vercel@latest ...` desde este directorio.
+- `deploy_vercel_prod.bat` lanza el deploy de produccion con `--archive=tgz --logs`.
+- `deploy_vercel_prod_debug.bat` anade tambien `--debug` para diagnosticar fallos de subida o build.
+- Si Vercel te pregunta por el `scope`, elige la cuenta o equipo donde ya existe el proyecto `bryozoasendino`.
+- No borres el proyecto si quieres conservar `bryozoasendino.vercel.app`.
 
-Deployment notes:
+### GitHub Pages
 
-- In Vercel you need an external PostgreSQL database; the local embedded database from `npm run db:start` is only for local development
-- Set `APP_URL` to your real Vercel URL or custom domain, not `http://localhost:3000`
+Tambien es valido, pero requiere pipeline de build.
 
-## Docker Compose
+Notas practicas:
 
-Start app + PostgreSQL:
+- Vite documenta despliegue con `GitHub Actions`.
+- Este proyecto usa `base: './'` en `vite.config.ts` para hacerlo mas portable como sitio estatico.
+- Si mas adelante prefieres una base absoluta, ajusta `vite.config.ts` segun la URL final.
 
-```bash
-docker compose up --build
-```
+Referencia oficial:
 
-The compose setup is development-oriented and runs:
+- Vite static deploy / GitHub Pages: https://vite.dev/guide/static-deploy.html#github-pages
 
-- Postgres 16
-- Next.js app on port `3000`
-- automatic `prisma generate`, migration and seed on startup
+## Si luego anades rutas SPA
 
-## Search and performance notes
+Ahora mismo la aplicacion no necesita router cliente. Si en el futuro anades rutas tipo `/registro/123`, en Vercel te convendra anadir un `vercel.json` con rewrite a `index.html`, tal como indica su documentacion para SPAs en Vite.
 
-- search is server-side and works on a denormalized `searchText` field
-- migration includes GIN indexes for:
-  - PostgreSQL full-text vector over `searchText`
-  - trigram search over `searchText`
-- additional indexes exist for taxonomy, country/region, dates, coordinates and dedupe keys
+## Estado verificado
 
-## Tests and verification
+Comprobado en este directorio:
 
-TypeScript compilation should pass with:
+- `npm run lint`
+- `npm run build`
 
-```bash
-npx tsc --noEmit
-```
+El build generado queda en:
 
-You can run lint and tests with:
-
-```bash
-npm run lint
-npm run test
-```
-
-## Notes from this build
-
-- The supplied workbook was inspected directly:
-  - main sheet: `ALL`
-  - approx. `41,042` rows including header
-  - real headers in the first `52` columns
-- observed in the source data:
-  - partial dates such as `00/00/1991`
-  - `0/0` coordinates
-  - image URLs and filename-only image values
-  - mixed/typoed date qualifiers
-- local verification now uses the embedded PostgreSQL bootstrap behind `npm run db:start`
-- if you prefer Prisma Dev instead of the embedded server, `npm run db:start:prisma-dev` remains available as a fallback
+`dist/`

@@ -31,10 +31,12 @@ type CatalogMapProps = {
 }
 
 type MapFeatureProperties = {
-  id: string
+  groupId: string
+  recordId: string
   register: string
   taxon: string
   hasImages: boolean
+  groupCount: number
 }
 
 const EMPTY_COLLECTION: FeatureCollection<Point, MapFeatureProperties> = {
@@ -44,6 +46,21 @@ const EMPTY_COLLECTION: FeatureCollection<Point, MapFeatureProperties> = {
 
 const HOVER_DETAIL_GROUPS = DETAIL_GROUPS.slice(0, 2)
 
+type MapLocationGroup = {
+  groupId: string
+  latitude: number
+  longitude: number
+  hasImages: boolean
+  groupCount: number
+  representativeRecord: CatalogItem
+  records: CatalogItem[]
+}
+
+type MapGroupIndex = {
+  byGroupId: globalThis.Map<string, MapLocationGroup>
+  byRecordId: globalThis.Map<string, MapLocationGroup>
+}
+
 export function CatalogMap({
   datasetKey,
   locale,
@@ -51,14 +68,15 @@ export function CatalogMap({
   selectedRecordId,
   onSelectRecord,
 }: CatalogMapProps) {
+  const initialGroups = buildLocationGroups(records)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<Map | null>(null)
   const hoverPopupRef = useRef<Popup | null>(null)
   const hasFittedOnceRef = useRef(false)
   const datasetKeyRef = useRef(datasetKey)
   const localeRef = useRef(locale)
-  const recordIndexRef = useRef(buildRecordIndex(records))
-  const recordsRef = useRef<CatalogItem[]>(records)
+  const groupsRef = useRef<MapLocationGroup[]>(initialGroups)
+  const groupIndexRef = useRef<MapGroupIndex>(buildGroupIndex(initialGroups))
   const selectedRecordIdRef = useRef(selectedRecordId)
 
   const handleSelectRecord = useEffectEvent((recordId: string) => {
@@ -66,8 +84,9 @@ export function CatalogMap({
   })
 
   useEffect(() => {
-    recordsRef.current = records
-    recordIndexRef.current = buildRecordIndex(records)
+    const nextGroups = buildLocationGroups(records)
+    groupsRef.current = nextGroups
+    groupIndexRef.current = buildGroupIndex(nextGroups)
   }, [records])
 
   useEffect(() => {
@@ -93,8 +112,8 @@ export function CatalogMap({
       return
     }
 
-    syncDataToMap(map, recordsRef.current, hasFittedOnceRef)
-    syncSelectionToMap(map, recordsRef.current, selectedRecordIdRef.current)
+    syncDataToMap(map, groupsRef.current, hasFittedOnceRef)
+    syncSelectionToMap(map, groupIndexRef.current, selectedRecordIdRef.current)
   }, [datasetKey])
 
   useEffect(() => {
@@ -129,6 +148,9 @@ export function CatalogMap({
         cluster: true,
         clusterRadius: 54,
         clusterMaxZoom: 10,
+        clusterProperties: {
+          recordCount: ['+', ['get', 'groupCount']],
+        },
       })
 
       map.addLayer({
@@ -139,14 +161,22 @@ export function CatalogMap({
         paint: {
           'circle-color': [
             'step',
-            ['get', 'point_count'],
+            ['coalesce', ['get', 'recordCount'], ['get', 'point_count']],
             '#183153',
             20,
             '#14746f',
             60,
             '#f97316',
           ],
-          'circle-radius': ['step', ['get', 'point_count'], 18, 20, 24, 60, 30],
+          'circle-radius': [
+            'step',
+            ['coalesce', ['get', 'recordCount'], ['get', 'point_count']],
+            18,
+            20,
+            24,
+            60,
+            30,
+          ],
           'circle-stroke-color': '#f8f4ec',
           'circle-stroke-width': 2,
         },
@@ -158,7 +188,7 @@ export function CatalogMap({
         source: 'records',
         filter: ['has', 'point_count'],
         layout: {
-          'text-field': ['get', 'point_count_abbreviated'],
+          'text-field': ['to-string', ['coalesce', ['get', 'recordCount'], ['get', 'point_count']]],
           'text-font': ['Open Sans Bold'],
           'text-size': 12,
         },
@@ -171,7 +201,7 @@ export function CatalogMap({
         id: 'record-selected',
         type: 'circle',
         source: 'records',
-        filter: ['==', ['get', 'id'], ''],
+        filter: ['==', ['get', 'groupId'], ''],
         paint: {
           'circle-radius': 18,
           'circle-color': 'rgba(20, 116, 111, 0.18)',
@@ -190,6 +220,17 @@ export function CatalogMap({
           'icon-size': 1,
           'icon-anchor': 'center',
           'icon-allow-overlap': true,
+          'text-field': ['case', ['>', ['get', 'groupCount'], 1], ['to-string', ['get', 'groupCount']], ''],
+          'text-font': ['Open Sans Bold'],
+          'text-size': 11,
+          'text-anchor': 'center',
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+        },
+        paint: {
+          'text-color': '#f8f4ec',
+          'text-halo-color': '#183153',
+          'text-halo-width': 0.8,
         },
       })
 
@@ -203,11 +244,22 @@ export function CatalogMap({
           'icon-size': 1,
           'icon-anchor': 'center',
           'icon-allow-overlap': true,
+          'text-field': ['case', ['>', ['get', 'groupCount'], 1], ['to-string', ['get', 'groupCount']], ''],
+          'text-font': ['Open Sans Bold'],
+          'text-size': 11,
+          'text-anchor': 'center',
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+        },
+        paint: {
+          'text-color': '#102542',
+          'text-halo-color': '#f8f4ec',
+          'text-halo-width': 0.8,
         },
       })
 
-      syncDataToMap(map, recordsRef.current, hasFittedOnceRef)
-      syncSelectionToMap(map, recordsRef.current, selectedRecordIdRef.current)
+      syncDataToMap(map, groupsRef.current, hasFittedOnceRef)
+      syncSelectionToMap(map, groupIndexRef.current, selectedRecordIdRef.current)
 
       const hideHoverPopup = () => {
         hoverPopupRef.current?.remove()
@@ -241,7 +293,7 @@ export function CatalogMap({
         hideHoverPopup()
 
         const feature = event.features?.[0]
-        const recordId = feature?.properties?.id
+        const recordId = feature?.properties?.recordId
         if (typeof recordId === 'string') {
           handleSelectRecord(recordId)
         }
@@ -249,22 +301,22 @@ export function CatalogMap({
 
       const handleRecordHover = (event: maplibregl.MapLayerMouseEvent) => {
         const feature = event.features?.[0]
-        const recordId = feature?.properties?.id
-        if (typeof recordId !== 'string') {
+        const groupId = feature?.properties?.groupId
+        if (typeof groupId !== 'string') {
           hideHoverPopup()
           return
         }
 
-        const record = recordIndexRef.current.get(recordId)
+        const group = groupIndexRef.current.byGroupId.get(groupId)
         const popup = hoverPopupRef.current
-        if (!record || !popup) {
+        if (!group || !popup) {
           hideHoverPopup()
           return
         }
 
         popup
           .setLngLat(event.lngLat)
-          .setDOMContent(createHoverPopupContent(record, localeRef.current))
+          .setDOMContent(createHoverPopupContent(group.representativeRecord, localeRef.current))
           .addTo(map)
       }
 
@@ -306,7 +358,7 @@ export function CatalogMap({
       return
     }
 
-    syncDataToMap(map, records, hasFittedOnceRef)
+    syncDataToMap(map, groupsRef.current, hasFittedOnceRef)
   }, [records])
 
   useEffect(() => {
@@ -315,33 +367,31 @@ export function CatalogMap({
       return
     }
 
-    syncSelectionToMap(map, records, selectedRecordId)
+    syncSelectionToMap(map, groupIndexRef.current, selectedRecordId)
   }, [records, selectedRecordId])
 
   return <div className="catalog-map" ref={containerRef} />
 }
 
 function buildFeatureCollection(
-  records: CatalogItem[],
+  groups: MapLocationGroup[],
 ): FeatureCollection<Point, MapFeatureProperties> {
   const features: Array<Feature<Point, MapFeatureProperties>> = []
 
-  for (const record of records) {
-    if (!record.hasCoordinates) {
-      continue
-    }
-
+  for (const group of groups) {
     features.push({
       type: 'Feature',
       geometry: {
         type: 'Point',
-        coordinates: [record.longitude as number, record.latitude as number],
+        coordinates: [group.longitude, group.latitude],
       },
       properties: {
-        id: record.id,
-        register: record.record.Register,
-        taxon: record.record.Taxon,
-        hasImages: record.hasImages,
+        groupId: group.groupId,
+        recordId: group.representativeRecord.id,
+        register: group.representativeRecord.record.Register,
+        taxon: group.representativeRecord.record.Taxon,
+        hasImages: group.hasImages,
+        groupCount: group.groupCount,
       },
     })
   }
@@ -354,7 +404,7 @@ function buildFeatureCollection(
 
 function syncDataToMap(
   map: Map,
-  records: CatalogItem[],
+  groups: MapLocationGroup[],
   hasFittedOnceRef: { current: boolean },
 ) {
   if (!map.isStyleLoaded()) {
@@ -366,11 +416,11 @@ function syncDataToMap(
     return
   }
 
-  source.setData(buildFeatureCollection(records))
+  source.setData(buildFeatureCollection(groups))
 
-  const coordinates = records
-    .filter((record) => record.hasCoordinates)
-    .map((record) => [record.longitude as number, record.latitude as number] as [number, number])
+  const coordinates = groups.map(
+    (group) => [group.longitude, group.latitude] as [number, number],
+  )
 
   if (!coordinates.length) {
     return
@@ -382,34 +432,74 @@ function syncDataToMap(
     return
   }
 
-  if (records.length <= 1500) {
+  if (groups.length <= 1500) {
     fitMapToCoordinates(map, coordinates)
   }
 }
 
-function buildRecordIndex(records: CatalogItem[]): globalThis.Map<string, CatalogItem> {
-  const entries: Array<[string, CatalogItem]> = records.map((record) => [record.id, record])
-  return new globalThis.Map(entries)
+function buildLocationGroups(records: CatalogItem[]): MapLocationGroup[] {
+  const groups = new globalThis.Map<string, MapLocationGroup>()
+
+  for (const record of records) {
+    if (!record.hasCoordinates) {
+      continue
+    }
+
+    const groupId = `${record.latitude}|${record.longitude}|${record.hasImages ? 'photo' : 'plain'}`
+    const existing = groups.get(groupId)
+
+    if (existing) {
+      existing.records.push(record)
+      existing.groupCount += 1
+      continue
+    }
+
+    groups.set(groupId, {
+      groupId,
+      latitude: record.latitude as number,
+      longitude: record.longitude as number,
+      hasImages: record.hasImages,
+      groupCount: 1,
+      representativeRecord: record,
+      records: [record],
+    })
+  }
+
+  return Array.from(groups.values())
 }
 
-function syncSelectionToMap(map: Map, records: CatalogItem[], selectedRecordId: string) {
+function buildGroupIndex(groups: MapLocationGroup[]): MapGroupIndex {
+  const byGroupId = new globalThis.Map<string, MapLocationGroup>()
+  const byRecordId = new globalThis.Map<string, MapLocationGroup>()
+
+  for (const group of groups) {
+    byGroupId.set(group.groupId, group)
+    for (const record of group.records) {
+      byRecordId.set(record.id, group)
+    }
+  }
+
+  return { byGroupId, byRecordId }
+}
+
+function syncSelectionToMap(
+  map: Map,
+  groupIndex: MapGroupIndex,
+  selectedRecordId: string,
+) {
   if (!map.isStyleLoaded()) {
     return
   }
 
-  map.setFilter('record-selected', ['==', ['get', 'id'], selectedRecordId])
+  const selectedGroup = selectedRecordId ? groupIndex.byRecordId.get(selectedRecordId) : null
+  map.setFilter('record-selected', ['==', ['get', 'groupId'], selectedGroup?.groupId ?? ''])
 
-  if (!selectedRecordId) {
-    return
-  }
-
-  const selectedRecord = records.find((record) => record.id === selectedRecordId)
-  if (!selectedRecord?.hasCoordinates) {
+  if (!selectedGroup) {
     return
   }
 
   map.easeTo({
-    center: [selectedRecord.longitude as number, selectedRecord.latitude as number],
+    center: [selectedGroup.longitude, selectedGroup.latitude],
     zoom: Math.max(map.getZoom(), 4.5),
     duration: 650,
   })

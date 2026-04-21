@@ -77,6 +77,24 @@ export default function App() {
     filteredRecords[0] ??
     null
   const activeSelectedRecordId = selectedRecord?.id ?? ''
+  const sameLocationRecords = useMemo(() => {
+    if (!selectedRecord?.hasCoordinates) {
+      return selectedRecord ? [selectedRecord] : []
+    }
+
+    const locationKey = buildLocationKey(selectedRecord.latitude, selectedRecord.longitude)
+    const matches = filteredRecords.filter(
+      (record) =>
+        record.hasCoordinates &&
+        buildLocationKey(record.latitude, record.longitude) === locationKey,
+    )
+
+    if (!matches.length) {
+      return [selectedRecord]
+    }
+
+    return [selectedRecord, ...matches.filter((record) => record.id !== selectedRecord.id)]
+  }, [filteredRecords, selectedRecord])
 
   let visibleWithCoordinates = 0
   let visibleWithImages = 0
@@ -319,7 +337,12 @@ export default function App() {
         </div>
       </section>
 
-      <RecordSpotlight locale={locale} record={selectedRecord} />
+      <RecordSpotlight
+        locale={locale}
+        onSelectRecord={setSelectedRecordId}
+        record={selectedRecord}
+        sameLocationRecords={sameLocationRecords}
+      />
 
       <ResultsList
         locale={locale}
@@ -339,4 +362,8 @@ function extractErrorMessage(error: unknown, fallbackMessage: string): string {
   }
 
   return fallbackMessage
+}
+
+function buildLocationKey(latitude: number | null, longitude: number | null): string {
+  return `${latitude ?? 'na'}|${longitude ?? 'na'}`
 }

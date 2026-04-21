@@ -725,6 +725,83 @@ a {
   margin-top: 20px;
 }
 
+.spotlight-location-card {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(245, 240, 232, 0.7));
+  border: 1px solid rgba(24, 49, 83, 0.08);
+}
+
+.spotlight-location-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.spotlight-location-header h3 {
+  margin: 0;
+  color: #102542;
+  font-size: 1.16rem;
+}
+
+.spotlight-location-subtitle {
+  margin: 8px 0 0;
+  color: #53657a;
+  line-height: 1.5;
+}
+
+.spotlight-location-list {
+  display: grid;
+  gap: 10px;
+  max-height: 260px;
+  margin-top: 16px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+}
+
+.spotlight-location-item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgba(24, 49, 83, 0.08);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.76);
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.spotlight-location-item:hover {
+  transform: translateY(-1px);
+}
+
+.spotlight-location-item.is-selected {
+  border-color: rgba(20, 184, 166, 0.48);
+  box-shadow: 0 14px 24px rgba(20, 184, 166, 0.12);
+}
+
+.spotlight-location-item-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.spotlight-location-item h4 {
+  margin: 12px 0 0;
+  color: #102542;
+  font-size: 1.06rem;
+}
+
+.spotlight-location-item-subtitle {
+  margin: 6px 0 0;
+  color: #53657a;
+}
+
 .detail-group-card {
   padding: 18px;
   border-radius: 24px;
@@ -972,7 +1049,8 @@ a {
   }
 
   .results-header,
-  .spotlight-header {
+  .spotlight-header,
+  .spotlight-location-header {
     flex-direction: column;
   }
 

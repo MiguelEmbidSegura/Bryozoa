@@ -10,6 +10,7 @@ import type { Feature, FeatureCollection, Point } from 'geojson'
 
 import {
   DETAIL_GROUPS,
+  formatBadgeCount,
   hasTaxonTitle,
   isItalicField,
   type CatalogItem,
@@ -72,6 +73,7 @@ export function CatalogMap({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<Map | null>(null)
   const hoverPopupRef = useRef<Popup | null>(null)
+  const groupPopupRef = useRef<Popup | null>(null)
   const hasFittedOnceRef = useRef(false)
   const datasetKeyRef = useRef(datasetKey)
   const localeRef = useRef(locale)
@@ -91,11 +93,13 @@ export function CatalogMap({
 
   useEffect(() => {
     selectedRecordIdRef.current = selectedRecordId
+    groupPopupRef.current?.remove()
   }, [selectedRecordId])
 
   useEffect(() => {
     localeRef.current = locale
     hoverPopupRef.current?.remove()
+    groupPopupRef.current?.remove()
   }, [locale])
 
   useEffect(() => {
@@ -107,6 +111,7 @@ export function CatalogMap({
     datasetKeyRef.current = datasetKey
     hasFittedOnceRef.current = false
     hoverPopupRef.current?.remove()
+    groupPopupRef.current?.remove()
 
     if (!map) {
       return
@@ -135,6 +140,13 @@ export function CatalogMap({
       closeOnClick: false,
       className: 'map-record-hover-popup',
       maxWidth: '380px',
+      offset: 18,
+    })
+    groupPopupRef.current = new maplibregl.Popup({
+      closeButton: true,
+      closeOnClick: true,
+      className: 'map-record-group-popup',
+      maxWidth: '420px',
       offset: 18,
     })
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
@@ -264,9 +276,13 @@ export function CatalogMap({
       const hideHoverPopup = () => {
         hoverPopupRef.current?.remove()
       }
+      const hideGroupPopup = () => {
+        groupPopupRef.current?.remove()
+      }
 
       map.on('click', 'record-clusters', (event) => {
         hideHoverPopup()
+        hideGroupPopup()
 
         const feature = event.features?.[0]
         if (!feature) {
@@ -293,6 +309,43 @@ export function CatalogMap({
         hideHoverPopup()
 
         const feature = event.features?.[0]
+        const groupId = feature?.properties?.groupId
+        if (typeof groupId !== 'string') {
+          hideGroupPopup()
+          return
+        }
+
+        const group = groupIndexRef.current.byGroupId.get(groupId)
+        if (!group) {
+          hideGroupPopup()
+          return
+        }
+
+        if (group.groupCount > 1) {
+          const popup = groupPopupRef.current
+          if (!popup) {
+            return
+          }
+
+          popup
+            .setLngLat(event.lngLat)
+            .setDOMContent(
+              createGroupPopupContent(
+                group,
+                localeRef.current,
+                selectedRecordIdRef.current,
+                (recordId) => {
+                  handleSelectRecord(recordId)
+                  popup.remove()
+                },
+              ),
+            )
+            .addTo(map)
+          return
+        }
+
+        hideGroupPopup()
+
         const recordId = feature?.properties?.recordId
         if (typeof recordId === 'string') {
           handleSelectRecord(recordId)
@@ -300,6 +353,10 @@ export function CatalogMap({
       }
 
       const handleRecordHover = (event: maplibregl.MapLayerMouseEvent) => {
+        if (groupPopupRef.current?.isOpen()) {
+          return
+        }
+
         const feature = event.features?.[0]
         const groupId = feature?.properties?.groupId
         if (typeof groupId !== 'string') {
@@ -310,6 +367,11 @@ export function CatalogMap({
         const group = groupIndexRef.current.byGroupId.get(groupId)
         const popup = hoverPopupRef.current
         if (!group || !popup) {
+          hideHoverPopup()
+          return
+        }
+
+        if (group.groupCount > 1) {
           hideHoverPopup()
           return
         }
@@ -345,7 +407,9 @@ export function CatalogMap({
 
     return () => {
       hoverPopupRef.current?.remove()
+      groupPopupRef.current?.remove()
       hoverPopupRef.current = null
+      groupPopupRef.current = null
       map.remove()
       mapRef.current = null
       hasFittedOnceRef.current = false
@@ -677,6 +741,90 @@ function createHoverPopupContent(
 
   return root
 }
+
+function createGroupPopupContent(
+  group: MapLocationGroup,
+  locale: SupportedLocale,
+  selectedRecordId: string,
+  onSelectRecord: (recordId: string) => void,
+): HTMLDivElement {
+  const languageMeta = getLanguageMeta(locale)
+  const representativeRecord = group.representativeRecord
+  const root = document.createElement('div')
+  root.className = 'map-group-card'
+  root.dir = languageMeta.dir
+  root.lang = languageMeta.htmlLang
+
+  const header = document.createElement('header')
+  header.className = 'map-group-card-header'
+
+  const headerCopy = document.createElement('div')
+
+  const title = document.createElement('strong')
+  title.className = 'map-group-card-title'
+  title.textContent =
+    representativeRecord.record.Site !== 'N/A'
+      ? representativeRecord.record.Site
+      : `${getFieldLabel(locale, 'Latitude')} ${representativeRecord.record.Latitude} · ${getFieldLabel(locale, 'Longitude')} ${representativeRecord.record.Longitude}`
+  headerCopy.append(title)
+
+  const subtitle = document.createElement('span')
+  subtitle.className = 'map-group-card-subtitle'
+  subtitle.textContent = `${getFieldLabel(locale, 'Latitude')}: ${representativeRecord.record.Latitude} · ${getFieldLabel(locale, 'Longitude')}: ${representativeRecord.record.Longitude}`
+  headerCopy.append(subtitle)
+
+  header.append(headerCopy)
+
+  const countChip = document.createElement('span')
+  countChip.className = 'metric-chip'
+  countChip.textContent = formatBadgeCount(group.groupCount)
+  header.append(countChip)
+
+  root.append(header)
+
+  const list = document.createElement('div')
+  list.className = 'map-group-list'
+
+  for (const record of group.records) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className =
+      record.id === selectedRecordId ? 'map-group-item is-selected' : 'map-group-item'
+    button.addEventListener('click', () => onSelectRecord(record.id))
+
+    const top = document.createElement('div')
+    top.className = 'map-group-item-top'
+
+    const kicker = document.createElement('span')
+    kicker.className = 'result-kicker'
+    kicker.textContent = record.record.Register
+    top.append(kicker)
+
+    const dot = document.createElement('span')
+    dot.className = record.hasImages ? 'record-dot has-photo' : 'record-dot no-photo'
+    top.append(dot)
+
+    button.append(top)
+
+    const itemTitle = document.createElement('strong')
+    itemTitle.className = hasTaxonTitle(record)
+      ? 'map-group-item-title result-title-italic'
+      : 'map-group-item-title'
+    itemTitle.textContent = record.title
+    button.append(itemTitle)
+
+    const itemSubtitle = document.createElement('span')
+    itemSubtitle.className = 'map-group-item-subtitle'
+    itemSubtitle.textContent = `${record.record.Family} · ${record.subtitle}`
+    button.append(itemSubtitle)
+
+    list.append(button)
+  }
+
+  root.append(list)
+  return root
+}
+
 function isVisibleHoverValue(value: string | undefined): value is string {
   return Boolean(value) && value !== 'N/A'
 }

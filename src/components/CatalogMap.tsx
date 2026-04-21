@@ -565,6 +565,9 @@ function createHoverPopupContent(
       rowWrapper.className = 'map-hover-card-row'
 
       const label = document.createElement('dt')
+      if (isItalicField(row.field)) {
+        label.className = 'map-hover-card-label-italic'
+      }
       label.textContent = row.label
       rowWrapper.append(label)
 

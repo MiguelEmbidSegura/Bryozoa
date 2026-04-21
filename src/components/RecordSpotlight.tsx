@@ -100,7 +100,9 @@ export function RecordSpotlight({ locale, record }: RecordSpotlightProps) {
                   .filter((field) => record.record[field] && record.record[field] !== 'N/A')
                   .map((field) => (
                     <div key={field} className="detail-row">
-                      <dt>{getFieldLabel(locale, field)}</dt>
+                      <dt className={isItalicField(field) ? 'detail-label-italic' : undefined}>
+                        {getFieldLabel(locale, field)}
+                      </dt>
                       <dd className={isItalicField(field) ? 'detail-value-italic' : undefined}>
                         {record.record[field]}
                       </dd>

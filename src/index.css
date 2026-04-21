@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,600;1,9..144,700&family=Space+Grotesk:wght@400;500;700&display=swap');
 
 :root {
   color-scheme: light;
@@ -297,11 +297,26 @@ a {
 }
 
 .map-hover-card-title-italic,
+.map-hover-card-label-italic,
 .map-hover-card-value-italic,
 .record-title-italic,
+.detail-label-italic,
 .detail-value-italic,
 .result-title-italic {
+  font-family: 'Fraunces', serif;
   font-style: italic;
+  font-synthesis: style;
+}
+
+.map-hover-card-label-italic,
+.detail-label-italic {
+  letter-spacing: -0.01em;
+}
+
+.map-hover-card-value-italic,
+.detail-value-italic {
+  letter-spacing: -0.01em;
+  line-height: 1.5;
 }
 
 .map-hover-card-subtitle {

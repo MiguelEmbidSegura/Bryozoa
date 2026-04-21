@@ -93,6 +93,12 @@ a {
   color: #183153;
 }
 
+.hero-byline-name {
+  display: inline-block;
+  font-weight: 800;
+  font-size: calc(1em + 0.17rem);
+}
+
 .hero-email {
   display: inline-block;
   margin-top: 6px;

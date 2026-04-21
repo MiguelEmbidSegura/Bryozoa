@@ -220,7 +220,9 @@ export default function App() {
       <header className="hero">
         <div className="hero-copy reveal-up">
           <h1>{ui.appTitle}</h1>
-          <p className="hero-byline">by CONSUELO SENDINO</p>
+          <p className="hero-byline">
+            by <span className="hero-byline-name">CONSUELO SENDINO</span>
+          </p>
           <a className="hero-email" href="mailto:consuelo.sendino@gmail.com">
             consuelo.sendino@gmail.com
           </a>

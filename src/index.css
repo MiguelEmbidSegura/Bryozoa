@@ -743,6 +743,11 @@ a {
   text-align: center;
 }
 
+.map-empty {
+  z-index: 1;
+  pointer-events: none;
+}
+
 .loader-ring {
   width: 44px;
   height: 44px;

@@ -8,10 +8,23 @@ import maplibregl, {
 } from 'maplibre-gl'
 import type { Feature, FeatureCollection, Point } from 'geojson'
 
-import { DETAIL_GROUPS, type CatalogItem } from '../lib/catalog'
+import {
+  DETAIL_GROUPS,
+  hasTaxonTitle,
+  isItalicField,
+  type CatalogItem,
+} from '../lib/catalog'
+import {
+  getDetailGroupLabel,
+  getFieldLabel,
+  getLanguageMeta,
+  getUiText,
+  type SupportedLocale,
+} from '../lib/i18n'
 
 type CatalogMapProps = {
   datasetKey: string
+  locale: SupportedLocale
   records: CatalogItem[]
   selectedRecordId: string
   onSelectRecord: (recordId: string) => void
@@ -33,6 +46,7 @@ const HOVER_DETAIL_GROUPS = DETAIL_GROUPS.slice(0, 2)
 
 export function CatalogMap({
   datasetKey,
+  locale,
   records,
   selectedRecordId,
   onSelectRecord,
@@ -42,6 +56,7 @@ export function CatalogMap({
   const hoverPopupRef = useRef<Popup | null>(null)
   const hasFittedOnceRef = useRef(false)
   const datasetKeyRef = useRef(datasetKey)
+  const localeRef = useRef(locale)
   const recordIndexRef = useRef(buildRecordIndex(records))
   const recordsRef = useRef<CatalogItem[]>(records)
   const selectedRecordIdRef = useRef(selectedRecordId)
@@ -58,6 +73,11 @@ export function CatalogMap({
   useEffect(() => {
     selectedRecordIdRef.current = selectedRecordId
   }, [selectedRecordId])
+
+  useEffect(() => {
+    localeRef.current = locale
+    hoverPopupRef.current?.remove()
+  }, [locale])
 
   useEffect(() => {
     const map = mapRef.current
@@ -244,7 +264,7 @@ export function CatalogMap({
 
         popup
           .setLngLat(event.lngLat)
-          .setDOMContent(createHoverPopupContent(record))
+          .setDOMContent(createHoverPopupContent(record, localeRef.current))
           .addTo(map)
       }
 
@@ -484,15 +504,24 @@ function createMapStyle(): StyleSpecification {
   }
 }
 
-function createHoverPopupContent(record: CatalogItem): HTMLDivElement {
+function createHoverPopupContent(
+  record: CatalogItem,
+  locale: SupportedLocale,
+): HTMLDivElement {
+  const ui = getUiText(locale)
+  const languageMeta = getLanguageMeta(locale)
   const root = document.createElement('div')
   root.className = 'map-hover-card'
+  root.dir = languageMeta.dir
+  root.lang = languageMeta.htmlLang
 
   const header = document.createElement('header')
   header.className = 'map-hover-card-header'
 
   const title = document.createElement('strong')
-  title.className = 'map-hover-card-title'
+  title.className = hasTaxonTitle(record)
+    ? 'map-hover-card-title map-hover-card-title-italic'
+    : 'map-hover-card-title'
   title.textContent = record.title
   header.append(title)
 
@@ -506,7 +535,8 @@ function createHoverPopupContent(record: CatalogItem): HTMLDivElement {
   for (const group of HOVER_DETAIL_GROUPS) {
     const rows = group.fields
       .map((field) => ({
-        label: formatHoverFieldLabel(field),
+        field,
+        label: getFieldLabel(locale, field),
         value: record.record[field],
       }))
       .filter((entry) => isVisibleHoverValue(entry.value))
@@ -515,13 +545,13 @@ function createHoverPopupContent(record: CatalogItem): HTMLDivElement {
     section.className = 'map-hover-card-section'
 
     const sectionTitle = document.createElement('h3')
-    sectionTitle.textContent = group.title
+    sectionTitle.textContent = getDetailGroupLabel(locale, group.key)
     section.append(sectionTitle)
 
     if (!rows.length) {
       const empty = document.createElement('p')
       empty.className = 'map-hover-card-empty'
-      empty.textContent = 'Sin datos'
+      empty.textContent = ui.hoverNoData
       section.append(empty)
       root.append(section)
       continue
@@ -539,6 +569,9 @@ function createHoverPopupContent(record: CatalogItem): HTMLDivElement {
       rowWrapper.append(label)
 
       const value = document.createElement('dd')
+      if (isItalicField(row.field)) {
+        value.className = 'map-hover-card-value-italic'
+      }
       value.textContent = row.value
       rowWrapper.append(value)
 
@@ -551,11 +584,6 @@ function createHoverPopupContent(record: CatalogItem): HTMLDivElement {
 
   return root
 }
-
-function formatHoverFieldLabel(field: string): string {
-  return field.replace(/_/g, ' ')
-}
-
 function isVisibleHoverValue(value: string | undefined): value is string {
   return Boolean(value) && value !== 'N/A'
 }

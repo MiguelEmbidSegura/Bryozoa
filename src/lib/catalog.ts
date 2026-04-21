@@ -1,5 +1,3 @@
-export const APP_TITLE = 'Catalogo de Briozoos'
-export const APP_SUBTITLE = 'Atlas web de la coleccion Consuelo Sendino'
 export const RESULTS_PER_PAGE = 18
 
 export const KNOWN_FIELDS = [
@@ -47,9 +45,15 @@ export const REFERENCE_FIELDS = Array.from(
   (_, index) => `Reference${index + 1}`,
 )
 
-export const DETAIL_GROUPS = [
+export type DetailGroupKey =
+  | 'taxonomy'
+  | 'originLocation'
+  | 'collectionDetermination'
+  | 'referencesNotes'
+
+export const DETAIL_GROUPS: Array<{ key: DetailGroupKey; fields: string[] }> = [
   {
-    title: 'Taxonomia',
+    key: 'taxonomy',
     fields: [
       'Stratigrap',
       'Class',
@@ -62,7 +66,7 @@ export const DETAIL_GROUPS = [
     ],
   },
   {
-    title: 'Origen y localizacion',
+    key: 'originLocation',
     fields: [
       'Site',
       'Province/County/District',
@@ -79,7 +83,7 @@ export const DETAIL_GROUPS = [
     ],
   },
   {
-    title: 'Recoleccion y determinacion',
+    key: 'collectionDetermination',
     fields: [
       'Collection_date',
       'Date Qualifyer',
@@ -90,7 +94,7 @@ export const DETAIL_GROUPS = [
     ],
   },
   {
-    title: 'Referencias y notas',
+    key: 'referencesNotes',
     fields: [
       'Notes',
       'Reference1',
@@ -104,6 +108,7 @@ export const DETAIL_GROUPS = [
 
 const DISPLAY_MISSING = 'N/A'
 const MISSING_TOKENS = new Set(['', 'n/a', 'na', 'none', 'null', 'nan', '-', '--'])
+const ITALIC_FIELDS = new Set(['Taxon', 'Verbatim ID'])
 const COLUMN_NAME_ALIASES: Record<string, string> = {
   Order_: 'Order',
   Cited_Figu: 'Cited_figu',
@@ -165,6 +170,25 @@ export type CatalogDataset = {
   }
 }
 
+export type CatalogMessages = {
+  unsupportedFormat: string
+  sampleDownloadFailed: (status: number) => string
+  fileHasNoRecords: string
+  fileMustContainList: string
+  missingOptionalColumn: (field: string) => string
+  duplicateHeaders: (column: string, count: number) => string
+}
+
+const DEFAULT_MESSAGES: CatalogMessages = {
+  unsupportedFormat: 'Unsupported format. Use JSON, XLSX or XLS.',
+  sampleDownloadFailed: (status) => `Could not download the sample (${status}).`,
+  fileHasNoRecords: 'The file does not contain records.',
+  fileMustContainList: 'The file must contain a list of records.',
+  missingOptionalColumn: (field) => `Optional column '${field}' is missing. Filled as N/A.`,
+  duplicateHeaders: (column, count) =>
+    `${count} columns with the header '${column}' were detected. Extra ones were renamed automatically with '__N' suffixes.`,
+}
+
 export const DEFAULT_FILTERS: FilterState = {
   search: '',
   country: '',
@@ -178,39 +202,47 @@ export const DEFAULT_FILTERS: FilterState = {
   ignoreAccents: true,
 }
 
-export async function loadCatalogFromFile(file: File): Promise<CatalogDataset> {
+export async function loadCatalogFromFile(
+  file: File,
+  messages: CatalogMessages = DEFAULT_MESSAGES,
+): Promise<CatalogDataset> {
   const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
 
   if (extension === 'json') {
     const payload = JSON.parse(await file.text()) as unknown
-    return buildDataset(file.name, normalizeJsonPayload(payload))
+    return buildDataset(file.name, payload, messages)
   }
 
   if (extension === 'xlsx' || extension === 'xls') {
     const buffer = await file.arrayBuffer()
-    return buildDataset(file.name, await parseSpreadsheet(buffer))
+    return buildDataset(file.name, await parseSpreadsheet(buffer, messages), messages)
   }
 
-  throw new Error('Formato no soportado. Usa JSON, XLSX o XLS.')
+  throw new Error(messages.unsupportedFormat)
 }
 
-export async function loadCatalogFromUrl(url: string): Promise<CatalogDataset> {
+export async function loadCatalogFromUrl(
+  url: string,
+  messages: CatalogMessages = DEFAULT_MESSAGES,
+): Promise<CatalogDataset> {
   const response = await fetch(url)
   if (!response.ok) {
-    throw new Error(`No se pudo descargar la muestra (${response.status}).`)
+    throw new Error(messages.sampleDownloadFailed(response.status))
   }
 
   if (url.toLowerCase().endsWith('.json')) {
     return buildDataset(
       url.split('/').pop() ?? 'muestra.json',
-      normalizeJsonPayload(await response.json()),
+      await response.json(),
+      messages,
     )
   }
 
   const buffer = await response.arrayBuffer()
   return buildDataset(
     url.split('/').pop() ?? 'muestra.xlsx',
-    await parseSpreadsheet(buffer),
+    await parseSpreadsheet(buffer, messages),
+    messages,
   )
 }
 
@@ -265,8 +297,13 @@ export function hasRenderableImage(record: CatalogItem): boolean {
   return Boolean(record.previewImageUrl)
 }
 
-export function copyRecordToClipboard(record: CatalogItem): Promise<void> {
-  const lines = Object.entries(record.record).map(([key, value]) => `${key}: ${value}`)
+export function copyRecordToClipboard(
+  record: CatalogItem,
+  formatLabel: (field: string) => string = (field) => field,
+): Promise<void> {
+  const lines = Object.entries(record.record).map(
+    ([key, value]) => `${formatLabel(key)}: ${value}`,
+  )
   return navigator.clipboard.writeText(lines.join('\n'))
 }
 
@@ -274,11 +311,24 @@ export function formatBadgeCount(value: number): string {
   return new Intl.NumberFormat('es-ES').format(value)
 }
 
-function buildDataset(sourceLabel: string, rawPayload: unknown): CatalogDataset {
-  const normalizedPayload = normalizePayload(rawPayload)
+export function hasTaxonTitle(record: CatalogItem): boolean {
+  const taxon = cleanDisplayValue(record.record.Taxon)
+  return taxon !== DISPLAY_MISSING && record.title === taxon
+}
+
+export function isItalicField(field: string): boolean {
+  return ITALIC_FIELDS.has(field)
+}
+
+function buildDataset(
+  sourceLabel: string,
+  rawPayload: unknown,
+  messages: CatalogMessages,
+): CatalogDataset {
+  const normalizedPayload = normalizePayload(rawPayload, messages)
   const rawRecords = normalizedPayload.records
   if (!rawRecords.length) {
-    throw new Error('El archivo no contiene registros.')
+    throw new Error(messages.fileHasNoRecords)
   }
 
   const warnings = [...normalizedPayload.warnings]
@@ -298,7 +348,7 @@ function buildDataset(sourceLabel: string, rawPayload: unknown): CatalogDataset 
 
     for (const field of KNOWN_FIELDS) {
       if (!(field in rawRecord)) {
-        const message = `Falta la columna opcional '${field}'. Se rellena como N/A.`
+        const message = messages.missingOptionalColumn(field)
         if (!warnings.includes(message)) {
           warnings.push(message)
         }
@@ -332,7 +382,10 @@ function buildDataset(sourceLabel: string, rawPayload: unknown): CatalogDataset 
   }
 }
 
-function normalizePayload(rawPayload: unknown): { records: CatalogRecord[]; warnings: string[] } {
+function normalizePayload(
+  rawPayload: unknown,
+  messages: CatalogMessages,
+): { records: CatalogRecord[]; warnings: string[] } {
   if (
     rawPayload &&
     typeof rawPayload === 'object' &&
@@ -341,7 +394,7 @@ function normalizePayload(rawPayload: unknown): { records: CatalogRecord[]; warn
   ) {
     const payload = rawPayload as { records: unknown; warnings?: unknown }
     return {
-      records: normalizeInputRecords(payload.records),
+      records: normalizeInputRecords(payload.records, messages),
       warnings: Array.isArray(payload.warnings)
         ? payload.warnings.filter((warning): warning is string => typeof warning === 'string')
         : [],
@@ -349,14 +402,14 @@ function normalizePayload(rawPayload: unknown): { records: CatalogRecord[]; warn
   }
 
   return {
-    records: normalizeInputRecords(rawPayload),
+    records: normalizeInputRecords(rawPayload, messages),
     warnings: [],
   }
 }
 
-function normalizeInputRecords(rawPayload: unknown): CatalogRecord[] {
+function normalizeInputRecords(rawPayload: unknown, messages: CatalogMessages): CatalogRecord[] {
   if (!Array.isArray(rawPayload)) {
-    throw new Error('El fichero debe contener una lista de registros.')
+    throw new Error(messages.fileMustContainList)
   }
 
   return rawPayload
@@ -364,12 +417,9 @@ function normalizeInputRecords(rawPayload: unknown): CatalogRecord[] {
     .map((rawRecord) => normalizeRecordObject(rawRecord))
 }
 
-function normalizeJsonPayload(payload: unknown): CatalogRecord[] {
-  return normalizeInputRecords(payload)
-}
-
 async function parseSpreadsheet(
   buffer: ArrayBuffer,
+  messages: CatalogMessages,
 ): Promise<{ records: CatalogRecord[]; warnings: string[] }> {
   const XLSX = await import('xlsx')
   const workbook = XLSX.read(buffer, { type: 'array', dense: false })
@@ -413,7 +463,7 @@ async function parseSpreadsheet(
   }
 
   const headerRow = trimTrailingEmptyCells(rows[0] ?? [])
-  const [headers, headerWarnings] = normalizeHeaders(headerRow)
+  const [headers, headerWarnings] = normalizeHeaders(headerRow, messages)
 
   const records: CatalogRecord[] = []
 
@@ -434,7 +484,7 @@ async function parseSpreadsheet(
   }
 
   return {
-    records: normalizeInputRecords(records),
+    records: normalizeInputRecords(records, messages),
     warnings: headerWarnings,
   }
 }
@@ -467,13 +517,16 @@ function normalizeRecordObject(rawRecord: Record<string, unknown>): CatalogRecor
   return normalized
 }
 
-function normalizeHeaders(rawHeaders: unknown[]): [string[], string[]] {
+function normalizeHeaders(
+  rawHeaders: unknown[],
+  messages: CatalogMessages,
+): [string[], string[]] {
   const cleanedHeaders = rawHeaders.map((value, index) => {
     const cleaned = canonicalizeColumnName(value)
     return cleaned || `Column_${index + 1}`
   })
 
-  return makeUniqueColumnNames(cleanedHeaders)
+  return makeUniqueColumnNames(cleanedHeaders, messages)
 }
 
 function trimTrailingEmptyCells(rawValues: unknown[]): unknown[] {
@@ -488,7 +541,10 @@ function trimTrailingEmptyCells(rawValues: unknown[]): unknown[] {
   return lastUsedPosition >= 0 ? rawValues.slice(0, lastUsedPosition + 1) : []
 }
 
-function makeUniqueColumnNames(columns: string[]): [string[], string[]] {
+function makeUniqueColumnNames(
+  columns: string[],
+  messages: CatalogMessages,
+): [string[], string[]] {
   const uniqueColumns: string[] = []
   const duplicateCounts = new Map<string, number>()
   const seenCounts = new Map<string, number>()
@@ -508,8 +564,7 @@ function makeUniqueColumnNames(columns: string[]): [string[], string[]] {
   }
 
   const warnings = Array.from(duplicateCounts.entries()).map(
-    ([column, count]) =>
-      `Se detectaron ${count} columnas con el encabezado '${column}'. Las adicionales se renombraron automaticamente con sufijos '__N'.`,
+    ([column, count]) => messages.duplicateHeaders(column, count),
   )
 
   return [uniqueColumns, warnings]

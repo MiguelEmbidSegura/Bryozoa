@@ -1,4 +1,5 @@
 import type { CatalogDataset, FilterState, PresenceFilter } from '../lib/catalog'
+import { getUiText, type SupportedLocale } from '../lib/i18n'
 
 type FiltersPanelProps = {
   dataset: CatalogDataset | null
@@ -9,13 +10,8 @@ type FiltersPanelProps = {
   onLoadSample: () => void
   onExportJson: () => void
   disabled: boolean
+  locale: SupportedLocale
 }
-
-const PRESENCE_OPTIONS: Array<{ label: string; value: PresenceFilter }> = [
-  { label: 'Todos', value: 'all' },
-  { label: 'Con', value: 'with' },
-  { label: 'Sin', value: 'without' },
-]
 
 export function FiltersPanel({
   dataset,
@@ -26,35 +22,38 @@ export function FiltersPanel({
   onLoadSample,
   onExportJson,
   disabled,
+  locale,
 }: FiltersPanelProps) {
   const comboValues = dataset?.comboValues
+  const ui = getUiText(locale)
+  const presenceOptions: Array<{ label: string; value: PresenceFilter }> = [
+    { label: ui.all, value: 'all' },
+    { label: ui.with, value: 'with' },
+    { label: ui.without, value: 'without' },
+  ]
 
   return (
     <aside className="filters-panel glass-panel">
       <div className="filters-header">
-        <p className="panel-eyebrow">Mapa primero</p>
-        <h2>Busqueda y capas</h2>
-        <p>
-          El mapa es el centro de la interfaz. Haz clic en un punto o en una tarjeta
-          del listado para ver la ficha completa.
-        </p>
+        <p className="panel-eyebrow">{ui.mapFirst}</p>
+        <h2>{ui.searchAndLayers}</h2>
       </div>
 
       <div className="filters-actions">
         <button className="action-button" type="button" onClick={onOpenFile}>
-          Cargar archivo
+          {ui.loadFile}
         </button>
         <button className="ghost-button" type="button" onClick={onLoadSample}>
-          Abrir muestra
+          {ui.openSample}
         </button>
       </div>
 
       <label className="field-group">
-        <span>Busqueda global</span>
+        <span>{ui.globalSearch}</span>
         <input
           className="field-input"
           type="search"
-          placeholder="Taxon, registro, pais, notas..."
+          placeholder={ui.globalSearchPlaceholder}
           value={filters.search}
           onChange={(event) => onChange({ ...filters, search: event.target.value })}
         />
@@ -62,31 +61,36 @@ export function FiltersPanel({
 
       <div className="field-grid">
         <SelectField
-          label="Pais"
+          emptyLabel={ui.all}
+          label={ui.country}
           value={filters.country}
           options={comboValues?.countries ?? []}
           onChange={(value) => onChange({ ...filters, country: value })}
         />
         <SelectField
-          label="Familia"
+          emptyLabel={ui.all}
+          label={ui.family}
           value={filters.family}
           options={comboValues?.families ?? []}
           onChange={(value) => onChange({ ...filters, family: value })}
         />
         <SelectField
-          label="Tipo"
+          emptyLabel={ui.all}
+          label={ui.type}
           value={filters.type}
           options={comboValues?.types ?? []}
           onChange={(value) => onChange({ ...filters, type: value })}
         />
         <SelectField
-          label="Clase"
+          emptyLabel={ui.all}
+          label={ui.taxonClass}
           value={filters.taxonClass}
           options={comboValues?.classNames ?? []}
           onChange={(value) => onChange({ ...filters, taxonClass: value })}
         />
         <SelectField
-          label="Orden"
+          emptyLabel={ui.all}
+          label={ui.order}
           value={filters.order}
           options={comboValues?.orders ?? []}
           onChange={(value) => onChange({ ...filters, order: value })}
@@ -95,17 +99,20 @@ export function FiltersPanel({
 
       <div className="toggle-grid">
         <PresenceField
-          label="Fotos"
+          label={ui.photos}
+          options={presenceOptions}
           value={filters.photos}
           onChange={(value) => onChange({ ...filters, photos: value })}
         />
         <PresenceField
-          label="Coordenadas"
+          label={ui.coordinates}
+          options={presenceOptions}
           value={filters.coordinates}
           onChange={(value) => onChange({ ...filters, coordinates: value })}
         />
         <PresenceField
-          label="Referencias"
+          label={ui.references}
+          options={presenceOptions}
           value={filters.references}
           onChange={(value) => onChange({ ...filters, references: value })}
         />
@@ -119,15 +126,15 @@ export function FiltersPanel({
             onChange({ ...filters, ignoreAccents: event.target.checked })
           }
         />
-        <span>Ignorar tildes al buscar</span>
+        <span>{ui.ignoreAccents}</span>
       </label>
 
       <div className="filters-footer">
         <button className="ghost-button" type="button" onClick={onReset} disabled={disabled}>
-          Limpiar filtros
+          {ui.clearFilters}
         </button>
         <button className="export-button" type="button" onClick={onExportJson} disabled={disabled}>
-          Exportar JSON filtrado
+          {ui.exportFilteredJson}
         </button>
       </div>
     </aside>
@@ -135,11 +142,13 @@ export function FiltersPanel({
 }
 
 function SelectField({
+  emptyLabel,
   label,
   value,
   options,
   onChange,
 }: {
+  emptyLabel: string
   label: string
   value: string
   options: string[]
@@ -149,7 +158,7 @@ function SelectField({
     <label className="field-group">
       <span>{label}</span>
       <select className="field-select" value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="">Todos</option>
+        <option value="">{emptyLabel}</option>
         {options.map((option) => (
           <option key={option} value={option}>
             {option}
@@ -162,10 +171,12 @@ function SelectField({
 
 function PresenceField({
   label,
+  options,
   value,
   onChange,
 }: {
   label: string
+  options: Array<{ label: string; value: PresenceFilter }>
   value: PresenceFilter
   onChange: (value: PresenceFilter) => void
 }) {
@@ -177,7 +188,7 @@ function PresenceField({
         value={value}
         onChange={(event) => onChange(event.target.value as PresenceFilter)}
       >
-        {PRESENCE_OPTIONS.map((option) => (
+        {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
           </option>

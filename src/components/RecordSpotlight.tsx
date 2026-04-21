@@ -4,31 +4,36 @@ import {
   DETAIL_GROUPS,
   copyRecordToClipboard,
   hasRenderableImage,
+  hasTaxonTitle,
+  isItalicField,
   type CatalogItem,
 } from '../lib/catalog'
+import {
+  getDetailGroupLabel,
+  getFieldLabel,
+  getUiText,
+  type SupportedLocale,
+} from '../lib/i18n'
 
 type RecordSpotlightProps = {
+  locale: SupportedLocale
   record: CatalogItem | null
 }
 
-export function RecordSpotlight({ record }: RecordSpotlightProps) {
+export function RecordSpotlight({ locale, record }: RecordSpotlightProps) {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
+  const ui = getUiText(locale)
 
   if (!record) {
     return (
       <section className="spotlight-card glass-panel placeholder-spotlight">
-        <p className="panel-eyebrow">Visible a un clic</p>
-        <h2>Selecciona un registro desde el mapa o el listado</h2>
-        <p>
-          La ficha destacada aparece aqui sin cambiar de pantalla: taxonomia,
-          ubicacion, referencias y, si estan disponibles para navegador, tambien
-          sus imagenes.
-        </p>
+        <h2>{ui.selectRecordFromMap}</h2>
       </section>
     )
   }
 
   const canRenderImage = hasRenderableImage(record)
+  const shouldItalicizeTitle = hasTaxonTitle(record)
 
   return (
     <section className="spotlight-card glass-panel">
@@ -41,14 +46,11 @@ export function RecordSpotlight({ record }: RecordSpotlightProps) {
           />
         ) : (
           <div className="spotlight-image placeholder-image">
-            <span>{record.hasImages ? 'Fotos detectadas' : 'Sin fotos'}</span>
+            <span>{record.hasImages ? ui.photosDetected : ui.noPhotos}</span>
             {record.hasImages ? (
-              <small>
-                Hay referencias de imagen, pero solo se muestran URLs accesibles
-                desde el navegador.
-              </small>
+              <small>{ui.accessibleImageNotice}</small>
             ) : (
-              <small>Este registro no tiene imagenes asociadas.</small>
+              <small>{ui.noImagesAvailable}</small>
             )}
           </div>
         )}
@@ -57,18 +59,19 @@ export function RecordSpotlight({ record }: RecordSpotlightProps) {
       <div className="spotlight-content">
         <div className="spotlight-header">
           <div>
-            <p className="panel-eyebrow">Visible a un clic</p>
-            <h2>{record.title}</h2>
+            <h2 className={shouldItalicizeTitle ? 'record-title-italic' : undefined}>
+              {record.title}
+            </h2>
             <p className="spotlight-subtitle">{record.subtitle}</p>
           </div>
 
           <div className="badge-row">
             <span className="pill">{record.record.Family}</span>
             <span className={`pill ${record.hasImages ? 'pill-photo' : 'pill-muted'}`}>
-              {record.hasImages ? 'Con fotos' : 'Sin fotos'}
+              {record.hasImages ? ui.photosDetected : ui.noPhotos}
             </span>
             <span className={`pill ${record.hasCoordinates ? 'pill-map' : 'pill-muted'}`}>
-              {record.hasCoordinates ? 'Georreferenciado' : 'Sin coordenadas'}
+              {record.hasCoordinates ? ui.georeferenced : ui.noCoordinates}
             </span>
           </div>
         </div>
@@ -78,31 +81,29 @@ export function RecordSpotlight({ record }: RecordSpotlightProps) {
             className="ghost-button"
             type="button"
             onClick={() => {
-              copyRecordToClipboard(record)
+              copyRecordToClipboard(record, (field) => getFieldLabel(locale, field))
                 .then(() => setCopyState('copied'))
                 .catch(() => setCopyState('error'))
               window.setTimeout(() => setCopyState('idle'), 1800)
             }}
           >
-            {copyState === 'copied'
-              ? 'Copiado'
-              : copyState === 'error'
-                ? 'No se pudo copiar'
-                : 'Copiar ficha'}
+            {copyState === 'copied' ? ui.copied : copyState === 'error' ? ui.copyFailed : ui.copyRecord}
           </button>
         </div>
 
         <div className="spotlight-groups">
           {DETAIL_GROUPS.map((group) => (
-            <article key={group.title} className="detail-group-card">
-              <h3>{group.title}</h3>
+            <article key={group.key} className="detail-group-card">
+              <h3>{getDetailGroupLabel(locale, group.key)}</h3>
               <dl>
                 {group.fields
                   .filter((field) => record.record[field] && record.record[field] !== 'N/A')
                   .map((field) => (
                     <div key={field} className="detail-row">
-                      <dt>{field}</dt>
-                      <dd>{record.record[field]}</dd>
+                      <dt>{getFieldLabel(locale, field)}</dt>
+                      <dd className={isItalicField(field) ? 'detail-value-italic' : undefined}>
+                        {record.record[field]}
+                      </dd>
                     </div>
                   ))}
               </dl>

@@ -1,10 +1,13 @@
 import {
   RESULTS_PER_PAGE,
   formatBadgeCount,
+  hasTaxonTitle,
   type CatalogItem,
 } from '../lib/catalog'
+import { getFieldLabel, getUiText, type SupportedLocale } from '../lib/i18n'
 
 type ResultsListProps = {
+  locale: SupportedLocale
   records: CatalogItem[]
   selectedRecordId: string
   page: number
@@ -13,12 +16,14 @@ type ResultsListProps = {
 }
 
 export function ResultsList({
+  locale,
   records,
   selectedRecordId,
   page,
   onPageChange,
   onSelectRecord,
 }: ResultsListProps) {
+  const ui = getUiText(locale)
   const totalPages = Math.max(1, Math.ceil(records.length / RESULTS_PER_PAGE))
   const safePage = Math.min(page, totalPages)
   const pageStart = (safePage - 1) * RESULTS_PER_PAGE
@@ -28,16 +33,16 @@ export function ResultsList({
     <section className="results-shell">
       <div className="results-header">
         <div>
-          <p className="panel-eyebrow">Listado secundario</p>
-          <h2>Registros visibles</h2>
-          <p>
-            El mapa manda; el listado queda debajo para navegar, comparar y abrir
-            la misma ficha con un clic.
-          </p>
+          <p className="panel-eyebrow">{ui.secondaryList}</p>
+          <h2>{ui.visibleRecords}</h2>
         </div>
         <div className="results-meta">
-          <span className="metric-chip">{formatBadgeCount(records.length)} visibles</span>
-          <span className="metric-chip">{formatBadgeCount(totalPages)} paginas</span>
+          <span className="metric-chip">
+            {formatBadgeCount(records.length)} {ui.visibleCount}
+          </span>
+          <span className="metric-chip">
+            {formatBadgeCount(totalPages)} {ui.pages}
+          </span>
         </div>
       </div>
 
@@ -53,31 +58,33 @@ export function ResultsList({
               <span className="result-kicker">{record.record.Register}</span>
               <span className={`record-dot ${record.hasImages ? 'has-photo' : 'no-photo'}`} />
             </div>
-            <h3>{record.title}</h3>
+            <h3 className={hasTaxonTitle(record) ? 'result-title-italic' : undefined}>
+              {record.title}
+            </h3>
             <p className="result-subtitle">{record.record.Family}</p>
             <dl className="result-facts">
               <div>
-                <dt>Pais</dt>
+                <dt>{getFieldLabel(locale, 'Country')}</dt>
                 <dd>{record.record.Country}</dd>
               </div>
               <div>
-                <dt>Site</dt>
+                <dt>{getFieldLabel(locale, 'Site')}</dt>
                 <dd>{record.record.Site}</dd>
               </div>
               <div>
-                <dt>Fecha</dt>
+                <dt>{getFieldLabel(locale, 'Collection_date')}</dt>
                 <dd>{record.record.Collection_date}</dd>
               </div>
             </dl>
             <div className="badge-row">
               <span className={`pill ${record.hasImages ? 'pill-photo' : 'pill-muted'}`}>
-                {record.hasImages ? 'Fotos' : 'Sin fotos'}
+                {record.hasImages ? ui.photos : ui.noPhotos}
               </span>
               <span className={`pill ${record.hasCoordinates ? 'pill-map' : 'pill-muted'}`}>
-                {record.hasCoordinates ? 'Mapa' : 'Sin mapa'}
+                {record.hasCoordinates ? ui.map : ui.noMap}
               </span>
               <span className={`pill ${record.hasReferences ? '' : 'pill-muted'}`}>
-                {record.hasReferences ? 'Referencias' : 'Sin refs'}
+                {record.hasReferences ? ui.refsShort : ui.noRefs}
               </span>
             </div>
           </button>
@@ -92,10 +99,10 @@ export function ResultsList({
             disabled={safePage <= 1}
             onClick={() => onPageChange(safePage - 1)}
           >
-            Anterior
+            {ui.previous}
           </button>
           <span>
-            Pagina {safePage} de {totalPages}
+            {ui.page} {safePage} {ui.of} {totalPages}
           </span>
           <button
             className="ghost-button"
@@ -103,7 +110,7 @@ export function ResultsList({
             disabled={safePage >= totalPages}
             onClick={() => onPageChange(safePage + 1)}
           >
-            Siguiente
+            {ui.next}
           </button>
         </div>
       ) : null}

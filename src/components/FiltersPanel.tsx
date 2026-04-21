@@ -8,7 +8,7 @@ type FiltersPanelProps = {
   onReset: () => void
   onOpenFile: () => void
   onLoadSample: () => void
-  onExportJson: () => void
+  onExportExcel: () => void
   disabled: boolean
   locale: SupportedLocale
 }
@@ -20,12 +20,13 @@ export function FiltersPanel({
   onReset,
   onOpenFile,
   onLoadSample,
-  onExportJson,
+  onExportExcel,
   disabled,
   locale,
 }: FiltersPanelProps) {
   const comboValues = dataset?.comboValues
   const ui = getUiText(locale)
+  const exportLabel = getExportLabel(locale)
   const presenceOptions: Array<{ label: string; value: PresenceFilter }> = [
     { label: ui.all, value: 'all' },
     { label: ui.with, value: 'with' },
@@ -128,12 +129,31 @@ export function FiltersPanel({
         <button className="ghost-button" type="button" onClick={onReset} disabled={disabled}>
           {ui.clearFilters}
         </button>
-        <button className="export-button" type="button" onClick={onExportJson} disabled={disabled}>
-          {ui.exportFilteredJson}
+        <button className="export-button" type="button" onClick={onExportExcel} disabled={disabled}>
+          {exportLabel}
         </button>
       </div>
     </aside>
   )
+}
+
+function getExportLabel(locale: SupportedLocale): string {
+  const labels: Record<SupportedLocale, string> = {
+    en: 'Export filtered Excel',
+    es: 'Exportar Excel filtrado',
+    fr: 'Exporter Excel filtré',
+    it: 'Esporta Excel filtrato',
+    pt: 'Exportar Excel filtrado',
+    'de-AT': 'Gefiltertes Excel exportieren',
+    cs: 'Exportovat filtrovaný Excel',
+    ru: 'Экспортировать отфильтрованный Excel',
+    zh: '导出筛选后的 Excel',
+    ja: '絞り込み Excel を出力',
+    ko: '필터링된 Excel 내보내기',
+    ar: 'تصدير Excel المُرشَّح',
+  }
+
+  return labels[locale]
 }
 
 function SelectField({

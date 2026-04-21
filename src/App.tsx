@@ -40,8 +40,7 @@ type DataSource =
 
 export default function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const activeSourceRef = useRef<DataSource>({ kind: 'url', url: SAMPLE_DATA_URL })
-  const hasLoadedSourceRef = useRef(false)
+  const activeSourceRef = useRef<DataSource | null>(null)
   const requestIdRef = useRef(0)
 
   const [catalog, setCatalog] = useState<CatalogDataset | null>(null)
@@ -50,7 +49,7 @@ export default function App() {
   const [page, setPage] = useState(1)
   const [locale, setLocale] = useState<SupportedLocale>('en')
   const [loadingLabel, setLoadingLabel] = useState('')
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
   const deferredFilters = useDeferredValue(filters)
@@ -108,7 +107,7 @@ export default function App() {
 
   const loadFromSource = useCallback(async (
     source: DataSource,
-    options: { initial: boolean; resetView: boolean },
+    options: { resetView: boolean },
   ) => {
     activeSourceRef.current = source
     const requestId = requestIdRef.current + 1
@@ -116,9 +115,7 @@ export default function App() {
     setErrorMessage('')
     setLoadingLabel(
       source.kind === 'url'
-        ? options.initial
-          ? ui.loadingInitialSample
-          : ui.loadingSample
+        ? ui.loadingSample
         : formatProcessingLabel(locale, source.file.name),
     )
     setIsLoading(true)
@@ -151,16 +148,14 @@ export default function App() {
         setIsLoading(false)
       }
     }
-  }, [locale, ui.loadingInitialSample, ui.loadingSample, ui.unexpectedError])
+  }, [locale, ui.loadingSample, ui.unexpectedError])
 
   useEffect(() => {
-    if (!hasLoadedSourceRef.current) {
-      hasLoadedSourceRef.current = true
-      void loadFromSource(activeSourceRef.current, { initial: true, resetView: true })
+    if (!activeSourceRef.current) {
       return
     }
 
-    void loadFromSource(activeSourceRef.current, { initial: false, resetView: false })
+    void loadFromSource(activeSourceRef.current, { resetView: false })
   }, [loadFromSource])
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -171,23 +166,38 @@ export default function App() {
       return
     }
 
-    void loadFromSource({ kind: 'file', file }, { initial: false, resetView: true })
+    void loadFromSource({ kind: 'file', file }, { resetView: true })
   }
 
-  function exportFilteredJson() {
+  async function exportFilteredExcel() {
     if (!filteredRecords.length) {
       return
     }
 
-    const blob = new Blob([JSON.stringify(makeExportPayload(filteredRecords), null, 2)], {
-      type: 'application/json;charset=utf-8',
-    })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = 'bryozoa_filtrado.json'
-    anchor.click()
-    URL.revokeObjectURL(url)
+    try {
+      const XLSX = await import('xlsx')
+      const workbook = XLSX.utils.book_new()
+      const worksheet = XLSX.utils.json_to_sheet(makeExportPayload(filteredRecords))
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Records')
+
+      const buffer = XLSX.write(workbook, {
+        bookType: 'xlsx',
+        type: 'array',
+      })
+
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
+      const fileName = buildExportFileName(catalog?.sourceLabel)
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = fileName
+      anchor.click()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      setErrorMessage(extractErrorMessage(error, ui.unexpectedError))
+    }
   }
 
   function handleFiltersChange(nextFilters: FilterState) {
@@ -291,12 +301,9 @@ export default function App() {
               filters={filters}
               locale={locale}
               onChange={handleFiltersChange}
-              onExportJson={exportFilteredJson}
+              onExportExcel={exportFilteredExcel}
               onLoadSample={() =>
-                void loadFromSource({ kind: 'url', url: SAMPLE_DATA_URL }, {
-                  initial: false,
-                  resetView: true,
-                })
+                void loadFromSource({ kind: 'url', url: SAMPLE_DATA_URL }, { resetView: true })
               }
               onOpenFile={() => fileInputRef.current?.click()}
               onReset={() => handleFiltersChange(DEFAULT_FILTERS)}
@@ -366,4 +373,14 @@ function extractErrorMessage(error: unknown, fallbackMessage: string): string {
 
 function buildLocationKey(latitude: number | null, longitude: number | null): string {
   return `${latitude ?? 'na'}|${longitude ?? 'na'}`
+}
+
+function buildExportFileName(sourceLabel?: string): string {
+  const baseName = (sourceLabel ?? 'bryozoa_catalog')
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^\w.-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+
+  return `${baseName || 'bryozoa_catalog'}_filtered.xlsx`
 }

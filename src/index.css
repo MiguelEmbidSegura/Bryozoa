@@ -47,7 +47,7 @@ a {
 .app-shell {
   width: min(1520px, calc(100vw - 32px));
   margin: 0 auto;
-  padding: 28px 0 40px;
+  padding: 18px 0 40px;
 }
 
 .hidden-file-input {
@@ -56,13 +56,13 @@ a {
 
 .hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(340px, 0.9fr);
-  gap: 18px;
-  align-items: stretch;
+  grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.82fr);
+  gap: 16px;
+  align-items: start;
 }
 
 .hero-copy {
-  padding: 12px 4px 8px;
+  padding: 4px 2px 0;
 }
 
 .hero-kicker,
@@ -78,16 +78,16 @@ a {
 .hero h1 {
   margin: 0;
   font-family: 'Fraunces', serif;
-  font-size: clamp(2.7rem, 5vw, 4.65rem);
-  line-height: 0.94;
+  font-size: clamp(2.2rem, 4.4vw, 3.95rem);
+  line-height: 0.88;
   letter-spacing: -0.045em;
   color: #102542;
 }
 
 .hero-byline {
-  margin: 14px 0 0;
+  margin: 6px 0 0;
   font-family: 'Fraunces', serif;
-  font-size: clamp(1.5rem, 3vw, 2.35rem);
+  font-size: clamp(1.05rem, 2vw, 1.7rem);
   line-height: 1;
   letter-spacing: -0.03em;
   color: #183153;
@@ -95,8 +95,8 @@ a {
 
 .hero-email {
   display: inline-block;
-  margin-top: 14px;
-  font-size: 1.08rem;
+  margin-top: 6px;
+  font-size: 0.94rem;
   font-weight: 700;
   color: #14746f;
   text-decoration: none;
@@ -133,27 +133,36 @@ a {
 }
 
 .hero-panel {
-  padding: 22px;
+  align-self: start;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 18px;
+  gap: 10px;
 }
 
 .language-picker {
-  max-width: 240px;
+  max-width: 232px;
   margin-top: 0;
+  padding: 10px 12px;
+  border-radius: 18px;
+  background: rgba(20, 116, 111, 0.08);
+  border: 1px solid rgba(20, 116, 111, 0.1);
+}
+
+.language-picker .field-select {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(20, 116, 111, 0.16);
 }
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .stat-grid article {
-  padding: 16px 18px;
-  border-radius: 22px;
+  padding: 10px 12px;
+  border-radius: 18px;
   background: linear-gradient(180deg, rgba(245, 240, 232, 0.88), rgba(255, 255, 255, 0.6));
   border: 1px solid rgba(24, 49, 83, 0.08);
 }
@@ -161,20 +170,21 @@ a {
 .stat-grid span {
   display: block;
   color: #53657a;
-  font-size: 0.86rem;
+  font-size: 0.76rem;
 }
 
 .stat-grid strong {
   display: block;
-  margin-top: 8px;
-  font-size: clamp(1.4rem, 2vw, 2rem);
+  margin-top: 4px;
+  font-size: clamp(1rem, 1.6vw, 1.6rem);
+  line-height: 1.02;
   color: #102542;
 }
 
 .hero-panel-footer {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .source-pill,
@@ -193,6 +203,12 @@ a {
 .metric-chip {
   background: rgba(16, 37, 66, 0.06);
   color: #183153;
+}
+
+.hero-panel .source-pill,
+.hero-panel .metric-chip {
+  padding: 6px 10px;
+  font-size: 0.78rem;
 }
 
 .error-banner {

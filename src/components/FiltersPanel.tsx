@@ -7,7 +7,6 @@ type FiltersPanelProps = {
   onChange: (nextFilters: FilterState) => void
   onReset: () => void
   onOpenFile: () => void
-  onLoadSample: () => void
   onExportExcel: () => void
   disabled: boolean
   locale: SupportedLocale
@@ -19,7 +18,6 @@ export function FiltersPanel({
   onChange,
   onReset,
   onOpenFile,
-  onLoadSample,
   onExportExcel,
   disabled,
   locale,
@@ -38,9 +36,6 @@ export function FiltersPanel({
       <div className="filters-actions">
         <button className="action-button" type="button" onClick={onOpenFile}>
           {ui.loadFile}
-        </button>
-        <button className="ghost-button" type="button" onClick={onLoadSample}>
-          {ui.openSample}
         </button>
       </div>
 

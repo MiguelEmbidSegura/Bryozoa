@@ -18,7 +18,6 @@ import {
   applyFilters,
   formatBadgeCount,
   loadCatalogFromFile,
-  loadCatalogFromUrl,
   makeExportPayload,
   type CatalogDataset,
   type FilterState,
@@ -32,11 +31,7 @@ import {
   type SupportedLocale,
 } from './lib/i18n'
 
-const SAMPLE_DATA_URL = 'data/ejemplo.json'
-
-type DataSource =
-  | { kind: 'url'; url: string }
-  | { kind: 'file'; file: File }
+type DataSource = { kind: 'file'; file: File }
 
 export default function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -113,19 +108,12 @@ export default function App() {
     const requestId = requestIdRef.current + 1
     requestIdRef.current = requestId
     setErrorMessage('')
-    setLoadingLabel(
-      source.kind === 'url'
-        ? ui.loadingSample
-        : formatProcessingLabel(locale, source.file.name),
-    )
+    setLoadingLabel(formatProcessingLabel(locale, source.file.name))
     setIsLoading(true)
 
     try {
       const messages = createCatalogMessages(locale)
-      const dataset =
-        source.kind === 'url'
-          ? await loadCatalogFromUrl(source.url, messages)
-          : await loadCatalogFromFile(source.file, messages)
+      const dataset = await loadCatalogFromFile(source.file, messages)
 
       if (requestId !== requestIdRef.current) {
         return
@@ -148,7 +136,7 @@ export default function App() {
         setIsLoading(false)
       }
     }
-  }, [locale, ui.loadingSample, ui.unexpectedError])
+  }, [locale, ui.unexpectedError])
 
   useEffect(() => {
     if (!activeSourceRef.current) {
@@ -304,9 +292,6 @@ export default function App() {
               locale={locale}
               onChange={handleFiltersChange}
               onExportExcel={exportFilteredExcel}
-              onLoadSample={() =>
-                void loadFromSource({ kind: 'url', url: SAMPLE_DATA_URL }, { resetView: true })
-              }
               onOpenFile={() => fileInputRef.current?.click()}
               onReset={() => handleFiltersChange(DEFAULT_FILTERS)}
             />

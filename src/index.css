@@ -382,8 +382,9 @@ a {
 
 .map-overlay-left {
   top: 18px;
+  bottom: 18px;
   left: 18px;
-  width: min(420px, calc(100% - 36px));
+  width: min(360px, calc(100% - 36px));
 }
 
 .map-overlay-right {
@@ -392,7 +393,59 @@ a {
 }
 
 .filters-panel {
-  padding: 20px;
+  height: 100%;
+  padding: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.filters-panel .filters-actions {
+  margin-top: 0;
+}
+
+.filters-panel .action-button,
+.filters-panel .ghost-button,
+.filters-panel .export-button {
+  padding: 10px 14px;
+  border-radius: 14px;
+}
+
+.filters-panel .field-grid,
+.filters-panel .toggle-grid {
+  gap: 10px;
+}
+
+.filters-panel .field-grid {
+  margin-top: 10px;
+}
+
+.filters-panel .toggle-grid {
+  margin-top: 10px;
+}
+
+.filters-panel .field-group {
+  margin-top: 10px;
+  gap: 6px;
+}
+
+.filters-panel .field-group span {
+  font-size: 0.82rem;
+}
+
+.filters-panel .field-input,
+.filters-panel .field-select {
+  padding: 10px 12px;
+  border-radius: 14px;
+}
+
+.filters-panel .check-row {
+  margin-top: 12px;
+  font-size: 0.95rem;
+}
+
+.filters-panel .filters-footer {
+  margin-top: 12px;
 }
 
 .filters-header h2,

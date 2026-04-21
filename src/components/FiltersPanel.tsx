@@ -34,11 +34,6 @@ export function FiltersPanel({
 
   return (
     <aside className="filters-panel glass-panel">
-      <div className="filters-header">
-        <p className="panel-eyebrow">{ui.mapFirst}</p>
-        <h2>{ui.searchAndLayers}</h2>
-      </div>
-
       <div className="filters-actions">
         <button className="action-button" type="button" onClick={onOpenFile}>
           {ui.loadFile}

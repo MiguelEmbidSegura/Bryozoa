@@ -3,11 +3,12 @@ import maplibregl, {
   type GeoJSONSource,
   type LngLatBoundsLike,
   type Map,
+  type Popup,
   type StyleSpecification,
 } from 'maplibre-gl'
 import type { Feature, FeatureCollection, Point } from 'geojson'
 
-import type { CatalogItem } from '../lib/catalog'
+import { DETAIL_GROUPS, type CatalogItem } from '../lib/catalog'
 
 type CatalogMapProps = {
   datasetKey: string
@@ -28,6 +29,8 @@ const EMPTY_COLLECTION: FeatureCollection<Point, MapFeatureProperties> = {
   features: [],
 }
 
+const HOVER_DETAIL_GROUPS = DETAIL_GROUPS.slice(0, 2)
+
 export function CatalogMap({
   datasetKey,
   records,
@@ -36,8 +39,10 @@ export function CatalogMap({
 }: CatalogMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<Map | null>(null)
+  const hoverPopupRef = useRef<Popup | null>(null)
   const hasFittedOnceRef = useRef(false)
   const datasetKeyRef = useRef(datasetKey)
+  const recordIndexRef = useRef(buildRecordIndex(records))
   const recordsRef = useRef<CatalogItem[]>(records)
   const selectedRecordIdRef = useRef(selectedRecordId)
 
@@ -47,6 +52,7 @@ export function CatalogMap({
 
   useEffect(() => {
     recordsRef.current = records
+    recordIndexRef.current = buildRecordIndex(records)
   }, [records])
 
   useEffect(() => {
@@ -61,6 +67,7 @@ export function CatalogMap({
 
     datasetKeyRef.current = datasetKey
     hasFittedOnceRef.current = false
+    hoverPopupRef.current?.remove()
 
     if (!map) {
       return
@@ -84,6 +91,13 @@ export function CatalogMap({
     })
 
     mapRef.current = map
+    hoverPopupRef.current = new maplibregl.Popup({
+      closeButton: false,
+      closeOnClick: false,
+      className: 'map-record-hover-popup',
+      maxWidth: '380px',
+      offset: 18,
+    })
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
 
     map.on('load', () => {
@@ -175,7 +189,13 @@ export function CatalogMap({
       syncDataToMap(map, recordsRef.current, hasFittedOnceRef)
       syncSelectionToMap(map, recordsRef.current, selectedRecordIdRef.current)
 
+      const hideHoverPopup = () => {
+        hoverPopupRef.current?.remove()
+      }
+
       map.on('click', 'record-clusters', (event) => {
+        hideHoverPopup()
+
         const feature = event.features?.[0]
         if (!feature) {
           return
@@ -198,6 +218,8 @@ export function CatalogMap({
       })
 
       const handleUnclusteredClick = (event: maplibregl.MapLayerMouseEvent) => {
+        hideHoverPopup()
+
         const feature = event.features?.[0]
         const recordId = feature?.properties?.id
         if (typeof recordId === 'string') {
@@ -205,20 +227,53 @@ export function CatalogMap({
         }
       }
 
+      const handleRecordHover = (event: maplibregl.MapLayerMouseEvent) => {
+        const feature = event.features?.[0]
+        const recordId = feature?.properties?.id
+        if (typeof recordId !== 'string') {
+          hideHoverPopup()
+          return
+        }
+
+        const record = recordIndexRef.current.get(recordId)
+        const popup = hoverPopupRef.current
+        if (!record || !popup) {
+          hideHoverPopup()
+          return
+        }
+
+        popup
+          .setLngLat(event.lngLat)
+          .setDOMContent(createHoverPopupContent(record))
+          .addTo(map)
+      }
+
       map.on('click', 'record-no-photo', handleUnclusteredClick)
       map.on('click', 'record-with-photo', handleUnclusteredClick)
+      map.on('mousemove', 'record-no-photo', handleRecordHover)
+      map.on('mousemove', 'record-with-photo', handleRecordHover)
 
-      for (const layerId of ['record-clusters', 'record-no-photo', 'record-with-photo']) {
+      map.on('mouseenter', 'record-clusters', () => {
+        map.getCanvas().style.cursor = 'pointer'
+      })
+      map.on('mouseleave', 'record-clusters', () => {
+        map.getCanvas().style.cursor = ''
+      })
+
+      for (const layerId of ['record-no-photo', 'record-with-photo']) {
         map.on('mouseenter', layerId, () => {
           map.getCanvas().style.cursor = 'pointer'
         })
         map.on('mouseleave', layerId, () => {
           map.getCanvas().style.cursor = ''
+          hideHoverPopup()
         })
       }
     })
 
     return () => {
+      hoverPopupRef.current?.remove()
+      hoverPopupRef.current = null
       map.remove()
       mapRef.current = null
       hasFittedOnceRef.current = false
@@ -310,6 +365,11 @@ function syncDataToMap(
   if (records.length <= 1500) {
     fitMapToCoordinates(map, coordinates)
   }
+}
+
+function buildRecordIndex(records: CatalogItem[]): globalThis.Map<string, CatalogItem> {
+  const entries: Array<[string, CatalogItem]> = records.map((record) => [record.id, record])
+  return new globalThis.Map(entries)
 }
 
 function syncSelectionToMap(map: Map, records: CatalogItem[], selectedRecordId: string) {
@@ -422,6 +482,82 @@ function createMapStyle(): StyleSpecification {
       },
     ],
   }
+}
+
+function createHoverPopupContent(record: CatalogItem): HTMLDivElement {
+  const root = document.createElement('div')
+  root.className = 'map-hover-card'
+
+  const header = document.createElement('header')
+  header.className = 'map-hover-card-header'
+
+  const title = document.createElement('strong')
+  title.className = 'map-hover-card-title'
+  title.textContent = record.title
+  header.append(title)
+
+  const subtitle = document.createElement('span')
+  subtitle.className = 'map-hover-card-subtitle'
+  subtitle.textContent = record.subtitle
+  header.append(subtitle)
+
+  root.append(header)
+
+  for (const group of HOVER_DETAIL_GROUPS) {
+    const rows = group.fields
+      .map((field) => ({
+        label: formatHoverFieldLabel(field),
+        value: record.record[field],
+      }))
+      .filter((entry) => isVisibleHoverValue(entry.value))
+
+    const section = document.createElement('section')
+    section.className = 'map-hover-card-section'
+
+    const sectionTitle = document.createElement('h3')
+    sectionTitle.textContent = group.title
+    section.append(sectionTitle)
+
+    if (!rows.length) {
+      const empty = document.createElement('p')
+      empty.className = 'map-hover-card-empty'
+      empty.textContent = 'Sin datos'
+      section.append(empty)
+      root.append(section)
+      continue
+    }
+
+    const definitionList = document.createElement('dl')
+    definitionList.className = 'map-hover-card-grid'
+
+    for (const row of rows) {
+      const rowWrapper = document.createElement('div')
+      rowWrapper.className = 'map-hover-card-row'
+
+      const label = document.createElement('dt')
+      label.textContent = row.label
+      rowWrapper.append(label)
+
+      const value = document.createElement('dd')
+      value.textContent = row.value
+      rowWrapper.append(value)
+
+      definitionList.append(rowWrapper)
+    }
+
+    section.append(definitionList)
+    root.append(section)
+  }
+
+  return root
+}
+
+function formatHoverFieldLabel(field: string): string {
+  return field.replace(/_/g, ' ')
+}
+
+function isVisibleHoverValue(value: string | undefined): value is string {
+  return Boolean(value) && value !== 'N/A'
 }
 
 function createMarkerImage(options: {

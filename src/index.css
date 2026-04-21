@@ -235,6 +235,96 @@ a {
   box-shadow: 0 14px 28px rgba(16, 37, 66, 0.12);
 }
 
+.map-record-hover-popup {
+  pointer-events: none;
+}
+
+.map-record-hover-popup .maplibregl-popup-content {
+  padding: 0;
+  border-radius: 24px;
+  background: rgba(255, 253, 249, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow:
+    0 18px 42px rgba(16, 37, 66, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(16px);
+}
+
+.map-record-hover-popup .maplibregl-popup-tip {
+  border-top-color: rgba(255, 253, 249, 0.94);
+}
+
+.map-hover-card {
+  width: min(360px, calc(100vw - 48px));
+  padding: 18px 18px 16px;
+}
+
+.map-hover-card-header {
+  display: grid;
+  gap: 4px;
+}
+
+.map-hover-card-title {
+  color: #102542;
+  font-size: 1rem;
+}
+
+.map-hover-card-subtitle {
+  color: #53657a;
+  font-size: 0.8rem;
+}
+
+.map-hover-card-section + .map-hover-card-section {
+  margin-top: 14px;
+}
+
+.map-hover-card-section h3 {
+  margin: 0 0 8px;
+  color: #14746f;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.map-hover-card-grid {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.map-hover-card-row {
+  display: grid;
+  grid-template-columns: minmax(124px, 140px) minmax(0, 1fr);
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(24, 49, 83, 0.08);
+}
+
+.map-hover-card-row:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.map-hover-card-row dt {
+  color: #53657a;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.map-hover-card-row dd {
+  margin: 0;
+  color: #183153;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.map-hover-card-empty {
+  margin: 0;
+  color: #53657a;
+  font-size: 0.8rem;
+}
+
 .map-overlay {
   position: absolute;
   z-index: 2;
@@ -750,6 +840,16 @@ a {
 
   .catalog-map {
     height: 460px;
+  }
+
+  .map-hover-card {
+    width: min(320px, calc(100vw - 42px));
+    padding: 16px;
+  }
+
+  .map-hover-card-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 
   .map-overlay {
